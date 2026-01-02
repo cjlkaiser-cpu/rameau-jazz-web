@@ -5,7 +5,7 @@ export default defineConfig({
   plugins: [vue()],
   base: '/rameau-jazz-web/',
   server: {
-    port: 3000
+    port: 3333
   },
   build: {
     outDir: 'dist'
