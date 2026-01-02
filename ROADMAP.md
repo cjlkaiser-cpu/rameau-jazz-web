@@ -18,7 +18,7 @@
 
 ---
 
-### v0.2.0 - Export & Persistence (Actual)
+### v0.2.0 - Export & Persistence (Completado)
 **Objetivo**: Permitir guardar y exportar el trabajo
 
 #### Export
@@ -37,8 +37,8 @@
   - Nombre, fecha, key, tempo, estilo
   - Lista de progresiones guardadas
   - Import/Export JSON
-- [ ] **Presets personalizados** - Configuraciones de usuario
-  - Guardar combinaciones de parámetros
+- [x] **Presets personalizados** - Configuraciones de usuario
+  - Guardar combinaciones de parámetros (voicing, tempo, swing, modulación, volúmenes)
   - Importar/exportar presets como JSON
 
 ---
@@ -244,7 +244,8 @@ Prioridades actuales:
 2. ~~Export Audio WAV (v0.2.0)~~ ✅
 3. ~~Guardar progresiones (v0.2.0)~~ ✅
 4. ~~Export PDF Lead Sheet (v0.2.0)~~ ✅
-5. Edición manual de acordes (v0.3.0)
+5. ~~Presets personalizados (v0.2.0)~~ ✅
+6. Edición manual de acordes (v0.3.0)
 
 ---
 

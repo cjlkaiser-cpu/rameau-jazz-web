@@ -8,6 +8,10 @@
           <span class="save-icon">&#128190;</span>
           Guardadas
         </button>
+        <button class="btn btn-secondary preset-btn" @click="showCustomPresets = true">
+          <span class="preset-icon">&#9881;</span>
+          Presets
+        </button>
         <StylePresets />
         <div class="tempo-control">
           <span class="tempo-value">{{ harmonyStore.tempo }} BPM</span>
@@ -19,6 +23,12 @@
     <SavedProgressions
       :isOpen="showSavedProgressions"
       @close="showSavedProgressions = false"
+    />
+
+    <!-- Custom Presets Modal -->
+    <CustomPresets
+      :isOpen="showCustomPresets"
+      @close="showCustomPresets = false"
     />
 
     <!-- Main Content -->
@@ -81,6 +91,7 @@ import MixerPanel from './components/MixerPanel.vue'
 import ProgressionDisplay from './components/ProgressionDisplay.vue'
 import TensionMeter from './components/TensionMeter.vue'
 import SavedProgressions from './components/SavedProgressions.vue'
+import CustomPresets from './components/CustomPresets.vue'
 
 // Visualization
 import ForceGraph from './visualization/ForceGraph.vue'
@@ -91,6 +102,9 @@ const harmonyStore = useHarmonyStore()
 
 // Saved progressions modal
 const showSavedProgressions = ref(false)
+
+// Custom presets modal
+const showCustomPresets = ref(false)
 
 // Piano roll resize
 const pianoRollHeight = ref(180)
@@ -172,8 +186,15 @@ onUnmounted(() => {
   gap: 6px;
 }
 
-.save-icon {
+.save-icon,
+.preset-icon {
   font-size: 14px;
+}
+
+.preset-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
 
 .tempo-control {
