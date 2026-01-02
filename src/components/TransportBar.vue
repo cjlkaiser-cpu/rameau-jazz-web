@@ -20,6 +20,20 @@
           Generar
         </button>
       </div>
+      <button
+        class="btn solo-btn"
+        :class="{
+          'btn-secondary': !soloGenerated,
+          'btn-success': soloGenerated && soloEnabled,
+          'btn-muted': soloGenerated && !soloEnabled
+        }"
+        @click="soloGenerated ? toggleSolo() : generateSolo()"
+        :disabled="isGeneratingSolo || !hasProgression"
+        :title="soloGenerated ? 'Toggle AI solo' : 'Generate AI solo with LSTM'"
+      >
+        <span class="solo-icon">{{ isGeneratingSolo ? '...' : '🎷' }}</span>
+        {{ isGeneratingSolo ? 'Generando...' : (soloGenerated ? (soloEnabled ? 'Solo ON' : 'Solo OFF') : 'AI Solo') }}
+      </button>
       <div class="export-dropdown" ref="exportDropdown">
         <button
           class="btn btn-secondary export-btn"
@@ -121,6 +135,7 @@ import {
 } from '../export/AudioExporter.js'
 import { downloadPdf, generatePdfFilename } from '../export/PdfExporter.js'
 import { exportLeadsheet, generateChordChart } from '../export/LeadsheetExporter.js'
+import { getSoloEngine } from '../solo/SoloEngine.js'
 
 const harmonyStore = useHarmonyStore()
 
@@ -138,6 +153,11 @@ const isRecording = ref(false)
 
 // Measure count for generation
 const measureCount = ref(8)
+
+// Solo generation state
+const isGeneratingSolo = ref(false)
+const soloGenerated = ref(false)
+const soloEnabled = ref(false)
 
 // Tap tempo state
 const tapTimes = ref([])
@@ -211,6 +231,59 @@ function tapTempo() {
 
 function setSwing(event) {
   harmonyStore.setSwingAmount(event.target.value / 100)
+}
+
+// Solo generation
+async function generateSolo() {
+  if (isGeneratingSolo.value || !hasProgression.value) return
+
+  isGeneratingSolo.value = true
+  soloGenerated.value = false
+
+  try {
+    const soloEngine = getSoloEngine()
+
+    // Cargar modelo si no está cargado
+    if (!soloEngine.loaded) {
+      await soloEngine.loadModel()
+    }
+
+    // Generar solo
+    const melody = await soloEngine.generate(
+      harmonyStore.progression,
+      2,  // stepsPerBeat (corcheas)
+      0.9 // temperature
+    )
+
+    // Programar solo
+    soloEngine.scheduleSolo(melody, 2)
+
+    soloGenerated.value = true
+    soloEnabled.value = true
+    console.log(`Solo generated: ${melody.filter(n => n.type === 'note').length} notes`)
+  } catch (err) {
+    console.error('Error generating solo:', err)
+    alert('Error generating solo: ' + err.message)
+  } finally {
+    isGeneratingSolo.value = false
+  }
+}
+
+function toggleSolo() {
+  if (!soloGenerated.value) return
+
+  soloEnabled.value = !soloEnabled.value
+  const soloEngine = getSoloEngine()
+
+  if (soloEnabled.value) {
+    // Re-schedule solo
+    if (harmonyStore.progression.length > 0) {
+      // El solo ya está programado
+    }
+    soloEngine.setVolume(-6)
+  } else {
+    soloEngine.setVolume(-Infinity)
+  }
 }
 
 // Export functions
@@ -644,5 +717,31 @@ onUnmounted(() => {
 .export-option:disabled:hover {
   background: transparent;
   color: var(--text-primary);
+}
+
+/* Solo Button */
+.solo-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 100px;
+}
+
+.solo-btn.btn-muted {
+  background: var(--bg-tertiary);
+  color: var(--text-muted);
+}
+
+.solo-btn.btn-muted:hover {
+  background: var(--bg-secondary);
+}
+
+.solo-icon {
+  font-size: 14px;
+}
+
+.solo-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 </style>

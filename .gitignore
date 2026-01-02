@@ -25,3 +25,9 @@ npm-debug.log*
 
 # Coverage
 coverage/
+
+# LSTM development files (large)
+src/lstm/clifford_brown.json
+src/lstm/clifford_brown_lite.json
+src/lstm/clifford_weights/
+public/models/*.gz

@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Jazz LSTM Test</title>
+  <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.17.0"></script>
+  <style>
+    body { font-family: monospace; padding: 20px; background: #1a1a1a; color: #eee; }
+    button { padding: 10px 20px; font-size: 16px; cursor: pointer; }
+    #output { white-space: pre-wrap; margin-top: 20px; padding: 10px; background: #333; }
+  </style>
+</head>
+<body>
+  <h1>Jazz LSTM Test</h1>
+  <button onclick="runTest()">Generate Solo</button>
+  <div id="output">Click button to test...</div>
+
+  <script type="module">
+    // Simplified test version
+    const HIDDEN_SIZE = 300
+    const INPUT_SIZE = 50
+
+    class SimpleLSTMCell {
+      constructor(inputSize, hiddenSize) {
+        this.inputSize = inputSize
+        this.hiddenSize = hiddenSize
+      }
+
+      loadWeights(w) {
+        this.Wi = tf.tensor2d(w.input_w.data, w.input_w.shape)
+        this.bi = tf.tensor1d(w.input_b.data)
+        this.Wf = tf.tensor2d(w.forget_w.data, w.forget_w.shape)
+        this.bf = tf.tensor1d(w.forget_b.data)
+        this.Wc = tf.tensor2d(w.activate_w.data, w.activate_w.shape)
+        this.bc = tf.tensor1d(w.activate_b.data)
+        this.Wo = tf.tensor2d(w.out_w.data, w.out_w.shape)
+        this.bo = tf.tensor1d(w.out_b.data)
+
+        if (w.initialstate) {
+          const init = w.initialstate.data
+          this.h0 = tf.tensor1d(init.slice(0, this.hiddenSize))
+          this.c0 = tf.tensor1d(init.slice(this.hiddenSize))
+        } else {
+          this.h0 = tf.zeros([this.hiddenSize])
+          this.c0 = tf.zeros([this.hiddenSize])
+        }
+      }
+
+      step(x, hPrev, cPrev) {
+        return tf.tidy(() => {
+          const concat = tf.concat([x, hPrev])
+          const i = tf.sigmoid(tf.add(tf.matMul(concat.reshape([1, -1]), this.Wi).squeeze(), this.bi))
+          const f = tf.sigmoid(tf.add(tf.matMul(concat.reshape([1, -1]), this.Wf).squeeze(), this.bf))
+          const cCand = tf.tanh(tf.add(tf.matMul(concat.reshape([1, -1]), this.Wc).squeeze(), this.bc))
+          const o = tf.sigmoid(tf.add(tf.matMul(concat.reshape([1, -1]), this.Wo).squeeze(), this.bo))
+          const c = tf.add(tf.mul(f, cPrev), tf.mul(i, cCand))
+          const h = tf.mul(o, tf.tanh(c))
+          return { h, c }
+        })
+      }
+
+      getInitialState() {
+        return { h: this.h0.clone(), c: this.c0.clone() }
+      }
+    }
+
+    window.runTest = async function() {
+      const output = document.getElementById('output')
+      output.textContent = 'Loading model (2.1 MB)...\n'
+
+      try {
+        // Load weights
+        const response = await fetch('/models/clifford_brown_lite.json')
+        const model = await response.json()
+        output.textContent += 'Model loaded!\n\n'
+
+        // Create LSTMs
+        const lstm1 = new SimpleLSTMCell(INPUT_SIZE, HIDDEN_SIZE)
+        const lstm2 = new SimpleLSTMCell(HIDDEN_SIZE, HIDDEN_SIZE)
+
+        lstm1.loadWeights(model.weights.lstm1)
+        lstm2.loadWeights(model.weights.lstm2)
+
+        const denseW = tf.tensor2d(model.weights.dense.w.data, model.weights.dense.w.shape)
+        const denseB = tf.tensor1d(model.weights.dense.b.data)
+
+        output.textContent += 'Generating solo over Dm7 - G7 - Cmaj7...\n\n'
+
+        // Simple chord progression: Dm7 - G7 - Cmaj7
+        const chords = [
+          { root: 2, type: [1,0,0,1,0,0,0,1,0,0,1,0], name: 'Dm7' },   // D minor 7
+          { root: 7, type: [1,0,0,0,1,0,0,1,0,0,1,0], name: 'G7' },    // G dominant 7
+          { root: 0, type: [1,0,0,0,1,0,0,1,0,0,0,1], name: 'Cmaj7' }  // C major 7
+        ]
+
+        const noteNames = ['C', 'Db', 'D', 'Eb', 'E', 'F', 'Gb', 'G', 'Ab', 'A', 'Bb', 'B']
+        const melody = []
+
+        let state1 = lstm1.getInitialState()
+        let state2 = lstm2.getInitialState()
+
+        for (const chord of chords) {
+          output.textContent += `\n${chord.name}:\n`
+
+          for (let step = 0; step < 8; step++) {
+            // Create input (simplified)
+            const input = tf.zeros([INPUT_SIZE])
+
+            // Forward pass
+            const { h: h1, c: c1 } = lstm1.step(input, state1.h, state1.c)
+            state1.h.dispose(); state1.c.dispose()
+            state1 = { h: h1, c: c1 }
+
+            const { h: h2, c: c2 } = lstm2.step(h1, state2.h, state2.c)
+            state2.h.dispose(); state2.c.dispose()
+            state2 = { h: h2, c: c2 }
+
+            // Dense layer
+            const logits = tf.tidy(() => {
+              return tf.add(tf.matMul(h2.reshape([1, -1]), denseW).squeeze(), denseB)
+            })
+
+            // Get prediction
+            const probs = tf.softmax(logits)
+            const probsData = await probs.data()
+            const maxIdx = probsData.indexOf(Math.max(...probsData))
+
+            // Decode
+            let noteStr
+            if (maxIdx === 0) noteStr = 'rest'
+            else if (maxIdx === 1) noteStr = '---'
+            else {
+              const pitchClass = (maxIdx - 2 + chord.root) % 12
+              const octave = 4
+              noteStr = noteNames[pitchClass] + octave
+            }
+
+            output.textContent += `  ${noteStr}`
+            melody.push(noteStr)
+
+            input.dispose()
+            logits.dispose()
+            probs.dispose()
+          }
+        }
+
+        output.textContent += '\n\n✓ Solo generated successfully!'
+        output.textContent += '\n\nMelody: ' + melody.join(' ')
+
+      } catch (err) {
+        output.textContent += '\n\nError: ' + err.message
+        console.error(err)
+      }
+    }
+  </script>
+</body>
+</html>

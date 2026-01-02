@@ -43,6 +43,29 @@
 
 ---
 
+### v0.2.5 - AI Solo Generation (Completado)
+**Objetivo**: Generación de solos de jazz con IA
+
+#### LSTM Neural Network
+- [x] **Modelo Clifford Brown** - Port del connectome de Impro-Visor
+  - 2-layer LSTM (300 hidden units)
+  - Entrenado en transcripciones de solos reales
+- [x] **TensorFlow.js** - Inferencia en el navegador
+  - Pesos comprimidos (~2MB gzip)
+  - Generación en tiempo real
+
+#### Integración
+- [x] **Botón AI Solo** - Genera solo sobre la progresión actual
+- [x] **SoloEngine.js** - Motor de generación integrado
+- [x] **Sintetizador de solo** - MonoSynth tipo trompeta/sax
+- [x] **Toggle ON/OFF** - Activar/desactivar solo durante playback
+
+#### Export Impro-Visor
+- [x] **Export .ls** - Leadsheet format compatible
+- [x] **Chord chart** - Texto copiable al clipboard
+
+---
+
 ### v0.3.0 - Interactividad Avanzada
 **Objetivo**: Mayor control sobre la generación
 
@@ -216,6 +239,7 @@
 ## Backlog (Sin priorizar)
 
 ### Ideas Futuras
+- [x] **AI Solo Generation** - LSTM para generar solos de jazz (v0.2.5)
 - [ ] **AI suggestions** - LLM para sugerir próximo acorde
 - [ ] **Style transfer** - "Suena como Bill Evans"
 - [ ] **MIDI input** - Tocar acordes con teclado MIDI
