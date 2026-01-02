@@ -201,6 +201,12 @@ onUnmounted(() => {
 .sidebar-right {
   display: flex;
   flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.sidebar-right {
+  max-height: 100%;
 }
 
 .center-panel {
@@ -213,6 +219,8 @@ onUnmounted(() => {
   flex-direction: column;
   gap: 12px;
   overflow-y: auto;
+  flex: 1;
+  padding-right: 4px;
 }
 
 /* Resize Handle */
