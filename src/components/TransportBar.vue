@@ -57,6 +57,16 @@
             <span class="option-icon">&#128214;</span>
             Lead Sheet (Real Book)
           </button>
+          <div class="export-divider"></div>
+          <div class="export-section-label">IMPRO-VISOR</div>
+          <button class="export-option" @click="exportLS">
+            <span class="option-icon">&#127926;</span>
+            Leadsheet (.ls)
+          </button>
+          <button class="export-option" @click="exportChordChart">
+            <span class="option-icon">&#128196;</span>
+            Chord Chart (texto)
+          </button>
         </div>
       </div>
     </div>
@@ -110,6 +120,7 @@ import {
   generateAudioFilename
 } from '../export/AudioExporter.js'
 import { downloadPdf, generatePdfFilename } from '../export/PdfExporter.js'
+import { exportLeadsheet, generateChordChart } from '../export/LeadsheetExporter.js'
 
 const harmonyStore = useHarmonyStore()
 
@@ -272,6 +283,42 @@ function exportPdfSheet() {
     composer: 'RameauJazz',
     barsPerLine: 4,
     filename
+  })
+
+  showExportMenu.value = false
+}
+
+function exportLS() {
+  exportLeadsheet({
+    progression: harmonyStore.progression,
+    key: harmonyStore.key,
+    tempo: harmonyStore.tempo,
+    title: `RameauJazz_${harmonyStore.key}_${harmonyStore.progression.length}bars`,
+    style: harmonyStore.stylePreset
+  })
+  showExportMenu.value = false
+}
+
+function exportChordChart() {
+  const chart = generateChordChart({
+    progression: harmonyStore.progression,
+    key: harmonyStore.key,
+    tempo: harmonyStore.tempo,
+    title: 'RameauJazz Progression'
+  })
+
+  // Copy to clipboard
+  navigator.clipboard.writeText(chart).then(() => {
+    alert('Chord chart copiado al clipboard')
+  }).catch(() => {
+    // Fallback: download as text
+    const blob = new Blob([chart], { type: 'text/plain' })
+    const url = URL.createObjectURL(blob)
+    const link = document.createElement('a')
+    link.href = url
+    link.download = `RameauJazz_${harmonyStore.key}_chart.txt`
+    link.click()
+    URL.revokeObjectURL(url)
   })
 
   showExportMenu.value = false
