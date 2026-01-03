@@ -49,6 +49,12 @@
         {{ currentKey }}
       </text>
     </svg>
+
+    <!-- Current chord display -->
+    <div class="current-chord-display">
+      <span class="chord-degree">{{ currentChord }}</span>
+      <span class="chord-name">{{ absoluteChordName }}</span>
+    </div>
   </div>
 </template>
 
@@ -64,6 +70,56 @@ const outerRadius = size / 2 - 5
 const innerRadius = size / 3
 
 const currentKey = computed(() => harmonyStore.key)
+const currentChord = computed(() => harmonyStore.currentChord)
+
+// Convert Roman numeral degree to absolute chord name
+const absoluteChordName = computed(() => {
+  const degree = currentChord.value
+  const key = currentKey.value
+  if (!degree) return ''
+
+  return degreeToAbsolute(degree, key)
+})
+
+/**
+ * Convert a Roman numeral degree to absolute chord name
+ * e.g., "IIm7" in key of C = "Dm7"
+ */
+function degreeToAbsolute(degree, key) {
+  // Parse Roman numeral and quality
+  const match = degree.match(/^(b?#?)([IViv]+)(.*)$/)
+  if (!match) return degree
+
+  const accidental = match[1] // 'b', '#', or ''
+  const numeral = match[2].toUpperCase()
+  const quality = match[3] // 'm7', 'maj7', '7', etc.
+
+  // Roman numeral to semitone offset
+  const numeralToSemitone = {
+    'I': 0, 'II': 2, 'III': 4, 'IV': 5, 'V': 7, 'VI': 9, 'VII': 11
+  }
+
+  let semitones = numeralToSemitone[numeral] ?? 0
+
+  // Apply accidental
+  if (accidental === 'b') semitones -= 1
+  if (accidental === '#') semitones += 1
+
+  // Key to semitone
+  const keyToSemitone = {
+    'C': 0, 'Db': 1, 'D': 2, 'Eb': 3, 'E': 4, 'F': 5,
+    'Gb': 6, 'G': 7, 'Ab': 8, 'A': 9, 'Bb': 10, 'B': 11
+  }
+
+  const keySemitone = keyToSemitone[key] ?? 0
+  const noteSemitone = (keySemitone + semitones + 12) % 12
+
+  // Semitone to note name (prefer flats for jazz)
+  const semitoneToNote = ['C', 'Db', 'D', 'Eb', 'E', 'F', 'Gb', 'G', 'Ab', 'A', 'Bb', 'B']
+  const noteName = semitoneToNote[noteSemitone]
+
+  return noteName + quality
+}
 
 // Circle of fifths order
 const keys = [
@@ -137,5 +193,32 @@ function selectKey(key) {
 
 .key-segment.active:hover path {
   fill: var(--accent-blue) !important;
+}
+
+/* Current chord display */
+.current-chord-display {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  margin-top: 8px;
+  padding: 8px 12px;
+  background: var(--bg-tertiary);
+  border-radius: var(--radius-md);
+  min-width: 100px;
+}
+
+.chord-degree {
+  font-size: 11px;
+  color: var(--text-muted);
+  font-family: 'SF Mono', Monaco, monospace;
+}
+
+.chord-name {
+  font-size: 18px;
+  font-weight: 700;
+  color: var(--accent-blue);
+  font-family: 'SF Mono', Monaco, monospace;
+  letter-spacing: 0.5px;
 }
 </style>

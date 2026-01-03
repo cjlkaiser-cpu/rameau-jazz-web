@@ -86,6 +86,7 @@
 import { ref, computed } from 'vue'
 import { useHarmonyStore } from '../stores/harmony'
 import StandardsLibrary from './StandardsLibrary.vue'
+import { chordToRoman } from '../engine/ChordConverter.js'
 
 const harmonyStore = useHarmonyStore()
 
@@ -137,14 +138,21 @@ function loadStandard() {
   if (!selectedStandard.value) return
 
   const standard = selectedStandard.value
+  const key = standard.key || 'C'
 
-  // Convert chord symbols to our progression format
-  const progression = standard.chords.map((chord, idx) => ({
-    degree: chord,
-    key: standard.key,
-    tension: 0.5, // Default tension
-    section: idx === 0 ? 'A' : null // Mark first chord
-  }))
+  // Convert absolute chord symbols to Roman numerals
+  const progression = standard.chords.map((chord, idx) => {
+    const romanDegree = chordToRoman(chord, key)
+    return {
+      degree: romanDegree,
+      key: key,
+      tension: 0.5, // Default tension
+      section: idx === 0 ? 'A' : null // Mark first chord
+    }
+  })
+
+  // Update the key in the store to match the standard
+  harmonyStore.setKey(key)
 
   // Load into store
   harmonyStore.loadProgression(progression)

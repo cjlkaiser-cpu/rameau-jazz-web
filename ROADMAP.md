@@ -80,8 +80,8 @@
 
 ---
 
-### v0.3.5 - Song Forms (Completado)
-**Objetivo**: Generar canciones completas con estructuras típicas
+### v0.3.5 - Song Forms & Standards Library (Completado)
+**Objetivo**: Generar canciones completas y cargar standards reales
 
 #### Templates de Forma
 - [x] **AABA (32 bars)** - Rhythm Changes, standards
@@ -90,9 +90,20 @@
 
 #### Generación Inteligente
 - [x] **Secciones contrastantes** - A estable, B con más tensión
-- [x] **Turnarounds automáticos** - V7→I al final de cada sección
+- [x] **Turnarounds variados** - Resolving, suspending, backdoor, tritone
 - [x] **Marcadores visuales** - [A] [B] [C] en ProgressionDisplay
 - [x] **Click en marcador** - Selecciona toda la sección
+
+#### Standards Library (Bonus!)
+- [x] **2614 jazz standards** - Extraídos de Impro-Visor leadsheets
+- [x] **Búsqueda por título/compositor** - Modal con filtro en tiempo real
+- [x] **Conversión automática** - Acordes absolutos → grados romanos
+- [x] **ChordConverter.js** - Cm7 en Bb → IIm7
+- [x] **120+ grados extendidos** - Cobertura completa para standards
+
+#### UI Improvements
+- [x] **Display de acorde actual** - Nombre absoluto bajo Circle of Fifths
+- [x] **Footer redimensionable** - Hasta 400px para progresiones largas
 
 ---
 

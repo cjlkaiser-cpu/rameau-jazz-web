@@ -14,6 +14,49 @@ import { JAZZ_DEGREES } from '../engine/JazzDegrees.js'
 import { CHORD_TYPES } from '../engine/ChordTypes.js'
 import { getVoicing } from '../engine/Voicings.js'
 
+/**
+ * Fallback parser for unknown degrees
+ * Extracts root interval and chord type from degree string
+ */
+function parseDegreeString(degreeStr) {
+  // Roman numeral to semitone mapping
+  const numeralToRoot = {
+    'I': 0, 'bII': 1, 'II': 2, 'bIII': 3, 'III': 4, 'IV': 5,
+    '#IV': 6, 'bV': 6, 'V': 7, 'bVI': 8, 'VI': 9, 'bVII': 10, 'VII': 11
+  }
+
+  // Extract numeral and quality from degree string
+  const match = degreeStr.match(/^(b?#?[IViv]+)(.*)$/)
+  if (!match) {
+    return { root: 0, type: 'maj7' } // Default fallback
+  }
+
+  const numeral = match[1].toUpperCase()
+  const quality = match[2] || 'maj7'
+
+  // Map numeral to root
+  let root = numeralToRoot[numeral]
+  if (root === undefined) {
+    // Try without accidentals
+    const baseNumeral = numeral.replace(/[b#]/, '')
+    root = numeralToRoot[baseNumeral] ?? 0
+  }
+
+  // Normalize quality to known type
+  const typeMap = {
+    'maj7': 'maj7', 'maj9': 'maj9', '6': '6',
+    'm7': 'm7', 'm9': 'm9', 'min7': 'm7',
+    '7': '7', '9': '9', '13': '13', '7alt': '7alt',
+    'm7b5': 'm7b5', 'dim7': 'dim7',
+    'sus': 'sus', 'sus4': 'sus', '7sus': '7sus', '7sus4': '7sus',
+    'aug': 'aug'
+  }
+
+  const type = typeMap[quality] || 'maj7'
+
+  return { root, type }
+}
+
 export class AudioEngine {
   constructor() {
     this.piano = null
@@ -195,12 +238,22 @@ export class AudioEngine {
   playMeasure(chord, measureIndex, time) {
     this.currentMeasure = measureIndex
 
-    // Obtener info del acorde
-    const degreeInfo = JAZZ_DEGREES[chord.degree]
-    if (!degreeInfo) return
+    // Obtener info del acorde - with fallback for unknown degrees
+    let degreeInfo = JAZZ_DEGREES[chord.degree]
+    let rootPitch, chordType
 
-    const rootPitch = this.getRootPitch(chord.degree, chord.key)
-    const chordType = degreeInfo.type
+    if (degreeInfo) {
+      rootPitch = this.getRootPitch(chord.degree, chord.key)
+      chordType = degreeInfo.type
+    } else {
+      // Fallback: parse degree string directly
+      const parsed = parseDegreeString(chord.degree)
+      const keyPitches = { 'C': 0, 'Db': 1, 'D': 2, 'Eb': 3, 'E': 4, 'F': 5, 'Gb': 6, 'G': 7, 'Ab': 8, 'A': 9, 'Bb': 10, 'B': 11 }
+      const keyOffset = keyPitches[chord.key] ?? 0
+      rootPitch = 48 + keyOffset + parsed.root
+      chordType = parsed.type
+      console.log(`Fallback for unknown degree: ${chord.degree} -> root=${rootPitch}, type=${chordType}`)
+    }
 
     // Piano: voicing
     this.playPianoChord(rootPitch, chordType, time)
@@ -356,12 +409,22 @@ export class AudioEngine {
       await this.init()
     }
 
+    let rootPitch, chordType
     const degreeInfo = JAZZ_DEGREES[degree]
-    if (!degreeInfo) return
 
-    const rootPitch = this.getRootPitch(degree, key)
-    const voicing = getVoicing(rootPitch, degreeInfo.type, this.config.voicingStyle)
+    if (degreeInfo) {
+      rootPitch = this.getRootPitch(degree, key)
+      chordType = degreeInfo.type
+    } else {
+      // Fallback for unknown degrees
+      const parsed = parseDegreeString(degree)
+      const keyPitches = { 'C': 0, 'Db': 1, 'D': 2, 'Eb': 3, 'E': 4, 'F': 5, 'Gb': 6, 'G': 7, 'Ab': 8, 'A': 9, 'Bb': 10, 'B': 11 }
+      const keyOffset = keyPitches[key] ?? 0
+      rootPitch = 48 + keyOffset + parsed.root
+      chordType = parsed.type
+    }
 
+    const voicing = getVoicing(rootPitch, chordType, this.config.voicingStyle)
     const allNotes = [...voicing.left, ...voicing.right]
     const noteNames = midiArrayToNotes(allNotes)
 
