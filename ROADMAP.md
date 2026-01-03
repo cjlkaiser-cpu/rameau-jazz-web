@@ -107,32 +107,8 @@
 
 ---
 
-### v0.4.0 - Melodías y Audio HQ (Completado)
-**Objetivo**: Reproducir melodías de standards y mejorar calidad de audio
-
-#### Melodías de Standards
-- [x] **MelodyParser.js** - Parser de notación Impro-Visor (.ls)
-- [x] **316 melodías extraídas** - De solos, heads y transcripciones
-- [x] **Categorización** - melodies.json, transcriptions.json, heads.json
-- [x] **Indicadores visuales** - Badge de nota musical en items con melodía
-
-#### UI de Biblioteca
-- [x] **LibraryPanel con tabs** - Generar, Mis Temas, Standards, Heads, Solos
-- [x] **Búsqueda en tiempo real** - Filtro por título/compositor
-- [x] **Preview de selección** - Panel con info antes de cargar
-- [x] **Integración de melodía** - Auto-carga al seleccionar standard
-
-#### Visualización de Melodía
-- [x] **Track de melodía en PianoRoll** - Color naranja (#f0883e)
-- [x] **Notas redondeadas** - Distintas de acordes
-- [x] **Escalado automático** - Melodía se ajusta a duración de progresión
-- [x] **Highlight de compás actual** - Brillo en notas del compás activo
-
-#### Audio de Melodía
-- [x] **MelodySynth.js** - MonoSynth tipo trompeta/sax
-- [x] **Efectos** - Vibrato, delay, reverb, compressor
-- [x] **Control de volumen** - Slider en mixer
-- [x] **Toggle ON/OFF** - Habilitar/deshabilitar melodía
+### v0.4.0 - Audio HQ (Completado)
+**Objetivo**: Mejorar calidad de audio con samples reales
 
 #### Audio de Alta Calidad (HQ)
 - [x] **SampledPiano.js** - Salamander Grand Piano samples
@@ -140,6 +116,15 @@
 - [x] **Carga asíncrona** - No bloquea inicio de app
 - [x] **Botón HQ en Mixer** - Toggle para cargar/usar samples
 - [x] **Fallback a síntesis** - Si samples no cargan
+
+#### UI de Biblioteca Simplificada
+- [x] **LibraryPanel con 3 tabs** - Generar, Mis Temas, Standards
+- [x] **Búsqueda en tiempo real** - Filtro por título/compositor
+- [x] **Preview de selección** - Panel con info antes de cargar
+
+> **Nota**: Las melodías de .ls fueron implementadas pero removidas por
+> complejidad en la sincronización. Los archivos MelodyParser.js y
+> MelodySynth.js permanecen en el código para futuro desarrollo.
 
 ---
 
