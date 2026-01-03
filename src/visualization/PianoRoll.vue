@@ -283,35 +283,35 @@ function drawMelody() {
   if (melody.length === 0) return
   if (!harmonyStore.melodyEnabled) return
 
-  const numMeasures = Math.max(harmonyStore.progression.length, 8)
-  const measureWidth = canvasWidth / numMeasures
   const noteHeight = canvasHeight / pitchRange
   const beatsPerMeasure = 4
-  const pixelsPerBeat = measureWidth / beatsPerMeasure
 
-  // Get total duration to scale melody to progression
-  const totalProgressionBeats = numMeasures * beatsPerMeasure
+  // Calculate melody duration
   const melodyDuration = melody.length > 0
     ? melody[melody.length - 1].startBeat + melody[melody.length - 1].duration
     : 0
 
-  // Scale factor if melody is longer/shorter than progression
-  const scale = melodyDuration > 0 ? totalProgressionBeats / melodyDuration : 1
+  if (melodyDuration === 0) return
+
+  // Use melody duration to determine canvas scale (no artificial scaling)
+  const pixelsPerBeat = canvasWidth / melodyDuration
+
+  // Calculate beats per chord for current measure highlighting
+  const beatsPerChord = harmonyStore.progression.length > 0
+    ? melodyDuration / harmonyStore.progression.length
+    : beatsPerMeasure
 
   melody.forEach(note => {
     if (note.isRest || note.pitch === null) return
     if (note.pitch < minPitch || note.pitch > maxPitch) return
 
-    const scaledStart = note.startBeat * scale
-    const scaledDuration = note.duration * scale
-
-    const x = scaledStart * pixelsPerBeat
-    const width = Math.max(scaledDuration * pixelsPerBeat - 2, 4)
+    const x = note.startBeat * pixelsPerBeat
+    const width = Math.max(note.duration * pixelsPerBeat - 2, 4)
     const y = (maxPitch - note.pitch) * noteHeight
 
-    // Check if this note is in the current measure
-    const noteMeasure = Math.floor(scaledStart / beatsPerMeasure)
-    const isCurrentMeasure = noteMeasure === harmonyStore.currentMeasure
+    // Check if this note is in the current chord
+    const noteChordIndex = Math.floor(note.startBeat / beatsPerChord)
+    const isCurrentMeasure = noteChordIndex === harmonyStore.currentMeasure
 
     // Draw melody note (rounded rectangle)
     ctx.fillStyle = isCurrentMeasure ? '#ffa657' : colors.melody

@@ -265,13 +265,28 @@ export class AudioEngine {
    */
   scheduleProgression() {
     const measureDuration = Tone.Time('1m').toSeconds()
+    const beatsPerMeasure = 4
+    const beatDuration = measureDuration / beatsPerMeasure
 
-    this.progression.forEach((chord, measureIndex) => {
-      const startTime = measureIndex * measureDuration
+    // Calculate chord duration based on melody if available
+    let chordDuration = measureDuration // Default: 1 measure per chord
+    let totalDuration = this.progression.length * measureDuration
 
-      // Programar cada compas
+    const melodyBeats = this.getMelodyDurationBeats()
+    if (melodyBeats > 0 && this.progression.length > 0) {
+      // Melody exists - calculate beats per chord
+      const beatsPerChord = melodyBeats / this.progression.length
+      chordDuration = beatsPerChord * beatDuration
+      totalDuration = melodyBeats * beatDuration
+      console.log(`Melody sync: ${melodyBeats} beats, ${this.progression.length} chords, ${beatsPerChord.toFixed(2)} beats/chord`)
+    }
+
+    this.progression.forEach((chord, chordIndex) => {
+      const startTime = chordIndex * chordDuration
+
+      // Programar cada acorde
       const eventId = Tone.Transport.schedule((time) => {
-        this.playMeasure(chord, measureIndex, time)
+        this.playMeasure(chord, chordIndex, time)
       }, startTime)
 
       this.scheduledEvents.push(eventId)
@@ -284,7 +299,6 @@ export class AudioEngine {
 
     // Si loop esta habilitado, programar repeat
     if (this.loopEnabled) {
-      const totalDuration = this.progression.length * measureDuration
       Tone.Transport.loopEnd = totalDuration
       Tone.Transport.loop = true
     }
@@ -301,30 +315,20 @@ export class AudioEngine {
   }
 
   /**
-   * Programa las notas de melodia
+   * Programa las notas de melodia (sin escalado - usa tiempos originales)
    */
   scheduleMelody(measureDuration) {
     if (!this.melody || this.parsedMelody.length === 0) return
 
     const beatsPerMeasure = 4
     const beatDuration = measureDuration / beatsPerMeasure
-    const totalProgressionBeats = this.progression.length * beatsPerMeasure
-
-    // Calculate melody total duration for scaling
-    const lastNote = this.parsedMelody[this.parsedMelody.length - 1]
-    const melodyDuration = lastNote ? lastNote.startBeat + lastNote.duration : 0
-
-    // Scale factor to fit melody to progression length
-    const scale = melodyDuration > 0 ? totalProgressionBeats / melodyDuration : 1
 
     this.parsedMelody.forEach(note => {
       if (note.isRest || note.pitch === null) return
 
-      const scaledStart = note.startBeat * scale
-      const scaledDuration = note.duration * scale
-
-      const startTime = scaledStart * beatDuration
-      const noteDuration = scaledDuration * beatDuration
+      // Use original timing - no scaling
+      const startTime = note.startBeat * beatDuration
+      const noteDuration = note.duration * beatDuration
 
       // Convert MIDI pitch to note name
       const noteName = midiToNote(note.pitch)
@@ -336,6 +340,15 @@ export class AudioEngine {
 
       this.scheduledEvents.push(eventId)
     })
+  }
+
+  /**
+   * Get melody duration in beats
+   */
+  getMelodyDurationBeats() {
+    if (this.parsedMelody.length === 0) return 0
+    const lastNote = this.parsedMelody[this.parsedMelody.length - 1]
+    return lastNote ? lastNote.startBeat + lastNote.duration : 0
   }
 
   /**
