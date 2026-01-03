@@ -231,6 +231,12 @@ export const useHarmonyStore = defineStore('harmony', () => {
 
     syncAudioConfig()
     const audioEngine = getAudioEngine()
+
+    // Sync melody to audio engine if exists
+    if (currentMelody.value) {
+      audioEngine.loadMelody(currentMelody.value)
+    }
+
     audioEngine.play()
     isPlaying.value = true
   }

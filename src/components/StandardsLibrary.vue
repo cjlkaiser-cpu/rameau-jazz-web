@@ -72,7 +72,8 @@ onMounted(async () => {
   try {
     const response = await fetch('./data/standards.json')
     const data = await response.json()
-    standards.value = data.standards
+    // The JSON is an array directly, not wrapped in an object
+    standards.value = Array.isArray(data) ? data : (data.standards || [])
     loading.value = false
   } catch (err) {
     console.error('Failed to load standards:', err)

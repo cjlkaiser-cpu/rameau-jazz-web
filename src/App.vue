@@ -12,6 +12,10 @@
           <span class="preset-icon">&#9881;</span>
           Presets
         </button>
+        <button class="btn btn-primary standards-btn" @click="showStandardsLibrary = true">
+          <span class="standards-icon">&#127925;</span>
+          Standards
+        </button>
         <StylePresets />
         <div class="tempo-control">
           <span class="tempo-value">{{ harmonyStore.tempo }} BPM</span>
@@ -29,6 +33,13 @@
     <CustomPresets
       :isOpen="showCustomPresets"
       @close="showCustomPresets = false"
+    />
+
+    <!-- Standards Library Modal -->
+    <StandardsLibrary
+      :isOpen="showStandardsLibrary"
+      @close="showStandardsLibrary = false"
+      @select="loadStandard"
     />
 
     <!-- Main Content -->
@@ -101,6 +112,8 @@ import TensionMeter from './components/TensionMeter.vue'
 import SavedProgressions from './components/SavedProgressions.vue'
 import CustomPresets from './components/CustomPresets.vue'
 import LibraryPanel from './components/LibraryPanel.vue'
+import StandardsLibrary from './components/StandardsLibrary.vue'
+import { chordToRoman } from './engine/ChordConverter.js'
 
 // Visualization
 import ForceGraph from './visualization/ForceGraph.vue'
@@ -114,6 +127,27 @@ const showSavedProgressions = ref(false)
 
 // Custom presets modal
 const showCustomPresets = ref(false)
+
+// Standards library modal
+const showStandardsLibrary = ref(false)
+
+function loadStandard(standard) {
+  const key = standard.key || 'C'
+
+  // Convert chords to progression format
+  const progression = standard.chords.map((chord, idx) => {
+    const romanDegree = chordToRoman(chord, key)
+    return {
+      degree: romanDegree,
+      key: key,
+      tension: 0.5,
+      section: idx === 0 ? 'A' : null
+    }
+  })
+
+  harmonyStore.setKey(key)
+  harmonyStore.loadProgression(progression)
+}
 
 // Piano roll resize
 const pianoRollHeight = ref(180)
@@ -217,14 +251,26 @@ onUnmounted(() => {
 }
 
 .save-icon,
-.preset-icon {
+.preset-icon,
+.standards-icon {
   font-size: 14px;
 }
 
-.preset-btn {
+.preset-btn,
+.standards-btn {
   display: flex;
   align-items: center;
   gap: 6px;
+}
+
+.standards-btn {
+  background: linear-gradient(135deg, var(--accent-blue), var(--accent-purple));
+  border: none;
+  color: white;
+}
+
+.standards-btn:hover {
+  opacity: 0.9;
 }
 
 .tempo-control {

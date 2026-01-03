@@ -24,9 +24,9 @@ import { parseMelody } from '../engine/MelodyParser.js'
 const harmonyStore = useHarmonyStore()
 const canvasRef = ref(null)
 
-// Piano range: C2 (36) to C6 (84)
+// Piano range: C2 (36) to C7 (96) - extended for melodies
 const minPitch = 36
-const maxPitch = 84
+const maxPitch = 96
 const pitchRange = maxPitch - minPitch
 
 // Canvas dimensions
