@@ -12,7 +12,7 @@ import { JAZZ_DEGREES } from '../engine/JazzDegrees.js'
 // Constantes del modelo (deben coincidir con JazzLSTM.js)
 const HIDDEN_SIZE = 300
 const INPUT_SIZE = 50
-const OUTPUT_SIZE = 14
+const OUTPUT_SIZE = 27  // rest + continue + 25 pitch classes (2 octaves)
 
 const BEAT_PERIODS = [48, 24, 12, 6, 3, 16, 8, 4, 2]
 const LOW_BOUND = 48  // C3
@@ -64,14 +64,15 @@ class LSTMCell {
   }
 
   loadWeights(w) {
+    // Weights are stored transposed, need to transpose for matMul
     this.weights = {
-      Wi: tf.tensor2d(w.input_w.data, w.input_w.shape),
+      Wi: tf.tensor2d(w.input_w.data, w.input_w.shape).transpose(),
       bi: tf.tensor1d(w.input_b.data),
-      Wf: tf.tensor2d(w.forget_w.data, w.forget_w.shape),
+      Wf: tf.tensor2d(w.forget_w.data, w.forget_w.shape).transpose(),
       bf: tf.tensor1d(w.forget_b.data),
-      Wc: tf.tensor2d(w.activate_w.data, w.activate_w.shape),
+      Wc: tf.tensor2d(w.activate_w.data, w.activate_w.shape).transpose(),
       bc: tf.tensor1d(w.activate_b.data),
-      Wo: tf.tensor2d(w.out_w.data, w.out_w.shape),
+      Wo: tf.tensor2d(w.out_w.data, w.out_w.shape).transpose(),
       bo: tf.tensor1d(w.out_b.data)
     }
 
@@ -138,8 +139,9 @@ export class SoloEngine {
     console.log('Loading Jazz LSTM model...')
 
     try {
-      // Cargar pesos
-      const response = await fetch('/models/clifford_brown_lite.json')
+      // Cargar pesos (usar base URL de Vite)
+      const baseUrl = import.meta.env.BASE_URL || '/'
+      const response = await fetch(`${baseUrl}models/clifford_brown_lite.json`)
       const model = await response.json()
 
       // Crear células LSTM
@@ -149,8 +151,8 @@ export class SoloEngine {
       this.lstm1.loadWeights(model.weights.lstm1)
       this.lstm2.loadWeights(model.weights.lstm2)
 
-      // Capa densa final
-      this.denseW = tf.tensor2d(model.weights.dense.w.data, model.weights.dense.w.shape)
+      // Capa densa final (también transpuesta)
+      this.denseW = tf.tensor2d(model.weights.dense.w.data, model.weights.dense.w.shape).transpose()
       this.denseB = tf.tensor1d(model.weights.dense.b.data)
 
       this.loaded = true
@@ -169,34 +171,52 @@ export class SoloEngine {
   initSynth() {
     if (this.synth) return
 
-    // Synth tipo trompeta/sax para el solo
+    // Synth tipo trompeta jazz - más cálido y expresivo
     this.synth = new Tone.MonoSynth({
       oscillator: {
-        type: 'sawtooth'
+        type: 'fatsawtooth',
+        spread: 20,
+        count: 3
       },
       envelope: {
-        attack: 0.02,
-        decay: 0.1,
-        sustain: 0.3,
-        release: 0.3
+        attack: 0.05,
+        decay: 0.2,
+        sustain: 0.4,
+        release: 0.4
       },
       filterEnvelope: {
-        attack: 0.01,
-        decay: 0.2,
-        sustain: 0.5,
-        release: 0.2,
-        baseFrequency: 300,
-        octaves: 3
+        attack: 0.06,
+        decay: 0.3,
+        sustain: 0.4,
+        release: 0.3,
+        baseFrequency: 400,
+        octaves: 2.5
+      },
+      filter: {
+        type: 'lowpass',
+        frequency: 2000,
+        Q: 2
       }
     })
 
-    // Efectos
-    const reverb = new Tone.Reverb({ decay: 1.5, wet: 0.2 })
-    const delay = new Tone.FeedbackDelay('8n', 0.15)
-    delay.wet.value = 0.1
+    // Efectos para sonido jazz
+    this.vibrato = new Tone.Vibrato({
+      frequency: 5,
+      depth: 0.1
+    })
 
-    this.synth.chain(delay, reverb, Tone.Destination)
-    this.synth.volume.value = -6
+    const reverb = new Tone.Reverb({ decay: 2, wet: 0.25 })
+    const delay = new Tone.FeedbackDelay('8n.', 0.12)
+    delay.wet.value = 0.15
+
+    const eq = new Tone.EQ3({
+      low: -3,
+      mid: 2,
+      high: -2
+    })
+
+    this.synth.chain(this.vibrato, eq, delay, reverb, Tone.Destination)
+    this.synth.volume.value = -3  // Más volumen
   }
 
   /**
@@ -220,17 +240,19 @@ export class SoloEngine {
   }
 
   /**
-   * Codifica la nota previa
+   * Codifica la nota previa (mismo encoding que output: 27 clases)
    */
   encodeNote(midiNote, chordRoot, isRest, isContinue) {
-    const encoding = new Array(14).fill(0)
+    const encoding = new Array(27).fill(0)
     if (isRest) {
       encoding[0] = 1
     } else if (isContinue) {
       encoding[1] = 1
     } else {
-      const relativeNote = ((midiNote - chordRoot) % 12 + 12) % 12
-      encoding[2 + relativeNote] = 1
+      // Semitono relativo al root, centrado en index 14
+      const semitoneOffset = midiNote - chordRoot  // -12 a +12
+      const index = Math.max(2, Math.min(26, semitoneOffset + 14))
+      encoding[index] = 1
     }
     return encoding
   }
@@ -252,14 +274,20 @@ export class SoloEngine {
 
   /**
    * Decodifica el índice de salida a nota MIDI
+   * Impro-Visor encoding: 0=rest, 1=continue, 2-26=25 semitones (2 octaves)
+   * El rango es desde chord_root-12 hasta chord_root+12
    */
   decodeOutput(index, chordRoot) {
     if (index === 0) return { type: 'rest', note: null }
     if (index === 1) return { type: 'continue', note: null }
 
-    const pitchClass = index - 2
-    let midiNote = chordRoot + pitchClass
+    // Index 2 = root - 12 semitones (octava abajo)
+    // Index 14 = root (centro)
+    // Index 26 = root + 12 semitones (octava arriba)
+    const semitoneOffset = (index - 2) - 12  // -12 a +12
+    let midiNote = chordRoot + semitoneOffset
 
+    // Ajustar al rango válido del instrumento
     while (midiNote < LOW_BOUND) midiNote += 12
     while (midiNote > HIGH_BOUND) midiNote -= 12
 
@@ -274,14 +302,20 @@ export class SoloEngine {
   }
 
   /**
-   * Obtiene el pitch de la fundamental del acorde
+   * Obtiene el pitch de la fundamental del acorde (en rango de solo)
    */
   getChordRoot(degree, key) {
     const degreeInfo = JAZZ_DEGREES[degree]
-    if (!degreeInfo) return this.getKeyPitch(key)
+    if (!degreeInfo) return 60 + (KEY_TO_SEMITONE[key] || 0)
 
-    const keyPitch = this.getKeyPitch(key)
-    return keyPitch + degreeInfo.root
+    // Base en C4 (60) + offset de la tonalidad + root del grado
+    let root = 60 + (KEY_TO_SEMITONE[key] || 0) + degreeInfo.root
+
+    // Mantener en rango medio para el solo (C4-C5)
+    while (root < 60) root += 12
+    while (root > 72) root -= 12
+
+    return root
   }
 
   /**
@@ -308,7 +342,8 @@ export class SoloEngine {
     let state1 = this.lstm1.getInitialState()
     let state2 = this.lstm2.getInitialState()
 
-    for (const chord of progression) {
+    for (let measureIdx = 0; measureIdx < progression.length; measureIdx++) {
+      const chord = progression[measureIdx]
       const degreeInfo = JAZZ_DEGREES[chord.degree] || { type: 'm7', root: 0 }
       const chordType = degreeInfo.type
       const chordRoot = this.getChordRoot(chord.degree, chord.key)
@@ -356,7 +391,7 @@ export class SoloEngine {
         melody.push({
           timestep,
           beat: step / stepsPerBeat,
-          measure: progression.indexOf(chord),
+          measure: measureIdx,
           ...decoded,
           chordRoot
         })
@@ -397,7 +432,7 @@ export class SoloEngine {
   }
 
   /**
-   * Programa el solo para reproducción
+   * Programa el solo para reproducción sincronizado con el Transport
    * @param {Array} melody - Array de notas generadas
    * @param {number} stepsPerBeat - Subdivisión usada
    */
@@ -408,38 +443,40 @@ export class SoloEngine {
 
     this.clearScheduledEvents()
 
-    const stepDuration = Tone.Time('4n').toSeconds() / stepsPerBeat
-    let lastNoteTime = null
-    let lastNoteDuration = 0
+    // Usar notación de Tone.js para sincronizar con Transport
+    // '8n' = corchea, '16n' = semicorchea
+    const stepNotation = stepsPerBeat === 2 ? '8n' : '16n'
 
     melody.forEach((note, index) => {
-      const time = note.timestep * stepDuration
-
       if (note.type === 'note') {
-        // Si hay nota previa sostenida, calcular su duración
-        if (lastNoteTime !== null) {
-          // La nota previa se toca hasta aquí
-        }
-
         const noteName = this.midiToNoteName(note.note)
 
+        // Calcular tiempo en notación de compás: "measure:beat:subdivision"
+        const measure = Math.floor(note.timestep / (4 * stepsPerBeat))
+        const beatInMeasure = Math.floor((note.timestep % (4 * stepsPerBeat)) / stepsPerBeat)
+        const subdivision = note.timestep % stepsPerBeat
+
+        // Formato Tone.js: "bars:quarters:sixteenths"
+        const timeStr = `${measure}:${beatInMeasure}:${subdivision * (4 / stepsPerBeat)}`
+
         // Buscar duración (contar continues siguientes)
-        let duration = stepDuration
+        let durationSteps = 1
         for (let j = index + 1; j < melody.length; j++) {
           if (melody[j].type === 'continue') {
-            duration += stepDuration
+            durationSteps++
           } else {
             break
           }
         }
 
+        // Convertir duración a notación
+        const durationStr = `${durationSteps}*${stepNotation}`
+
         const eventId = Tone.Transport.schedule((t) => {
-          this.synth.triggerAttackRelease(noteName, duration, t)
-        }, time)
+          this.synth.triggerAttackRelease(noteName, durationStr, t)
+        }, timeStr)
 
         this.scheduledEvents.push(eventId)
-        lastNoteTime = time
-        lastNoteDuration = duration
       }
     })
 

@@ -27,33 +27,51 @@
 </template>
 
 <script setup>
+import { ref } from 'vue'
 import { useHarmonyStore } from '../stores/harmony'
+import { getSoloEngine } from '../solo/SoloEngine.js'
 
 const harmonyStore = useHarmonyStore()
 
 const channels = [
   { id: 'piano', label: 'Piano', toggleable: false },
   { id: 'bass', label: 'Bass', toggleable: true },
-  { id: 'drums', label: 'Drums', toggleable: true }
+  { id: 'drums', label: 'Drums', toggleable: true },
+  { id: 'solo', label: 'AI Solo', toggleable: true }
 ]
+
+// Solo volume state (local, not in store)
+const soloVolume = ref(0.7)
+const soloEnabled = ref(true)
 
 function getVolume(channelId) {
   switch (channelId) {
     case 'piano': return harmonyStore.pianoVolume
     case 'bass': return harmonyStore.bassVolume
     case 'drums': return harmonyStore.drumsVolume
+    case 'solo': return soloVolume.value
     default: return 0.5
   }
 }
 
 function setVolume(channelId, event) {
-  harmonyStore.setVolume(channelId, event.target.value / 100)
+  const value = event.target.value / 100
+  if (channelId === 'solo') {
+    soloVolume.value = value
+    const soloEngine = getSoloEngine()
+    // Convert 0-1 to dB (-30 to +6)
+    const db = value > 0 ? -30 + (value * 36) : -Infinity
+    soloEngine.setVolume(db)
+  } else {
+    harmonyStore.setVolume(channelId, value)
+  }
 }
 
 function isEnabled(channelId) {
   switch (channelId) {
     case 'bass': return harmonyStore.bassEnabled
     case 'drums': return harmonyStore.drumsEnabled
+    case 'solo': return soloEnabled.value
     default: return true
   }
 }
@@ -65,6 +83,11 @@ function toggleChannel(channelId) {
       break
     case 'drums':
       harmonyStore.setDrumsEnabled(!harmonyStore.drumsEnabled)
+      break
+    case 'solo':
+      soloEnabled.value = !soloEnabled.value
+      const soloEngine = getSoloEngine()
+      soloEngine.setVolume(soloEnabled.value ? 0 : -Infinity)
       break
   }
 }

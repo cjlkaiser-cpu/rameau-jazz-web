@@ -248,11 +248,11 @@ async function generateSolo() {
       await soloEngine.loadModel()
     }
 
-    // Generar solo
+    // Generar solo (temperatura baja = más conservador)
     const melody = await soloEngine.generate(
       harmonyStore.progression,
       2,  // stepsPerBeat (corcheas)
-      0.9 // temperature
+      0.5 // temperature (más bajo = menos free jazz)
     )
 
     // Programar solo
