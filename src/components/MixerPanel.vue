@@ -74,7 +74,6 @@ const channels = [
   { id: 'piano', label: 'Piano', toggleable: false },
   { id: 'bass', label: 'Bass', toggleable: true },
   { id: 'drums', label: 'Drums', toggleable: true },
-  { id: 'melody', label: 'Melody', toggleable: true },
   { id: 'solo', label: 'AI Solo', toggleable: true }
 ]
 
@@ -87,7 +86,6 @@ function getVolume(channelId) {
     case 'piano': return harmonyStore.pianoVolume
     case 'bass': return harmonyStore.bassVolume
     case 'drums': return harmonyStore.drumsVolume
-    case 'melody': return harmonyStore.melodyVolume
     case 'solo': return soloVolume.value
     default: return 0.5
   }
@@ -101,8 +99,6 @@ function setVolume(channelId, event) {
     // Convert 0-1 to dB (-30 to +6)
     const db = value > 0 ? -30 + (value * 36) : -Infinity
     lickEngine.setVolume(db)
-  } else if (channelId === 'melody') {
-    harmonyStore.setMelodyVolume(value)
   } else {
     harmonyStore.setVolume(channelId, value)
   }
@@ -112,7 +108,6 @@ function isEnabled(channelId) {
   switch (channelId) {
     case 'bass': return harmonyStore.bassEnabled
     case 'drums': return harmonyStore.drumsEnabled
-    case 'melody': return harmonyStore.melodyEnabled
     case 'solo': return soloEnabled.value
     default: return true
   }
@@ -125,9 +120,6 @@ function toggleChannel(channelId) {
       break
     case 'drums':
       harmonyStore.setDrumsEnabled(!harmonyStore.drumsEnabled)
-      break
-    case 'melody':
-      harmonyStore.setMelodyEnabled(!harmonyStore.melodyEnabled)
       break
     case 'solo':
       soloEnabled.value = !soloEnabled.value

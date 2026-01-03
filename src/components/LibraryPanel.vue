@@ -76,63 +76,14 @@
             v-for="standard in filteredStandards"
             :key="standard.title"
             class="list-item"
-            :class="{ 'has-melody': standard.hasMelody }"
             @click="selectStandard(standard)"
           >
-            <div class="item-title">
-              {{ standard.title }}
-              <span v-if="standard.hasMelody" class="melody-badge" title="Tiene melodía">♪</span>
-            </div>
+            <div class="item-title">{{ standard.title }}</div>
             <div class="item-meta">{{ standard.composer }} · {{ standard.key }}</div>
           </div>
         </div>
         <div class="list-footer" v-if="filteredStandards.length > 0">
           Mostrando {{ filteredStandards.length }} de {{ allStandards.length }}
-        </div>
-      </div>
-
-      <!-- Transcriptions tab -->
-      <div v-if="activeTab === 'transcriptions'" class="tab-pane">
-        <input
-          type="text"
-          v-model="transcriptionsSearch"
-          placeholder="Buscar transcripcion..."
-          class="search-input"
-        />
-        <div class="item-list">
-          <div
-            v-for="item in filteredTranscriptions"
-            :key="item.id"
-            class="list-item has-melody"
-            @click="selectTranscription(item)"
-          >
-            <div class="item-title">
-              {{ item.title }}
-              <span class="melody-badge" title="Con melodía">♪</span>
-            </div>
-            <div class="item-meta">{{ item.category }} · {{ item.key }}</div>
-          </div>
-        </div>
-        <div class="list-footer" v-if="filteredTranscriptions.length > 0">
-          {{ filteredTranscriptions.length }} transcripciones con melodía
-        </div>
-      </div>
-
-      <!-- Heads tab -->
-      <div v-if="activeTab === 'heads'" class="tab-pane">
-        <div class="item-list">
-          <div
-            v-for="item in heads"
-            :key="item.id"
-            class="list-item has-melody"
-            @click="selectHead(item)"
-          >
-            <div class="item-title">
-              {{ item.title }}
-              <span class="melody-badge" title="Melodía completa">♪</span>
-            </div>
-            <div class="item-meta">{{ item.composer }} · {{ item.key }}</div>
-          </div>
         </div>
       </div>
     </div>
@@ -141,8 +92,7 @@
     <div v-if="selectedItem" class="selected-preview">
       <div class="preview-title">{{ selectedItem.title }}</div>
       <div class="preview-meta">
-        {{ selectedItem.composer || selectedItem.category }} · {{ selectedItem.key }}
-        <span v-if="selectedItem.melody"> · ♪ melodía</span>
+        {{ selectedItem.composer }} · {{ selectedItem.key }}
       </div>
       <button class="action-btn primary" @click="loadSelected">
         Cargar
@@ -162,9 +112,7 @@ const harmonyStore = useHarmonyStore()
 const tabs = ref([
   { id: 'generate', label: 'Generar', icon: '🎲', count: null },
   { id: 'saved', label: 'Mis Temas', icon: '💾', count: 0 },
-  { id: 'standards', label: 'Standards', icon: '📚', count: 0 },
-  { id: 'heads', label: 'Heads', icon: '🎵', count: 0 },
-  { id: 'transcriptions', label: 'Solos', icon: '🎷', count: 0 }
+  { id: 'standards', label: 'Standards', icon: '📚', count: 0 }
 ])
 
 const activeTab = ref('generate')
@@ -189,13 +137,10 @@ const currentSections = computed(() => currentTemplate.value?.sections || [])
 
 // Data
 const allStandards = ref([])
-const transcriptions = ref([])
-const heads = ref([])
 const savedProgressions = ref([])
 
 // Search
 const standardsSearch = ref('')
-const transcriptionsSearch = ref('')
 
 // Selection
 const selectedItem = ref(null)
@@ -210,50 +155,20 @@ const filteredStandards = computed(() => {
   return filtered.slice(0, 100)
 })
 
-const filteredTranscriptions = computed(() => {
-  const search = transcriptionsSearch.value.toLowerCase()
-  const filtered = transcriptions.value.filter(t =>
-    t.title.toLowerCase().includes(search) ||
-    (t.category && t.category.toLowerCase().includes(search))
-  )
-  return filtered.slice(0, 100)
-})
-
 // Load data
 onMounted(async () => {
   // Load standards
   try {
     const resp = await fetch('./data/standards.json')
     const data = await resp.json()
-    allStandards.value = data.map(s => ({ ...s, hasMelody: false }))
-    tabs.value.find(t => t.id === 'standards').count = data.length
+    allStandards.value = Array.isArray(data) ? data : []
+    tabs.value.find(t => t.id === 'standards').count = allStandards.value.length
   } catch (e) {
     console.error('Failed to load standards:', e)
   }
 
-  // Load transcriptions
-  try {
-    const resp = await fetch('./data/transcriptions.json')
-    transcriptions.value = await resp.json()
-    tabs.value.find(t => t.id === 'transcriptions').count = transcriptions.value.length
-  } catch (e) {
-    console.error('Failed to load transcriptions:', e)
-  }
-
-  // Load heads
-  try {
-    const resp = await fetch('./data/heads.json')
-    heads.value = await resp.json()
-    tabs.value.find(t => t.id === 'heads').count = heads.value.length
-  } catch (e) {
-    console.error('Failed to load heads:', e)
-  }
-
   // Load saved progressions from localStorage
   loadSavedFromStorage()
-
-  // Mark standards that have melodies
-  markStandardsWithMelodies()
 })
 
 function loadSavedFromStorage() {
@@ -268,18 +183,6 @@ function loadSavedFromStorage() {
   }
 }
 
-function markStandardsWithMelodies() {
-  // Create a set of titles that have melodies
-  const melodyTitles = new Set([
-    ...heads.value.map(h => h.title.toLowerCase()),
-    ...transcriptions.value.map(t => t.title.toLowerCase())
-  ])
-
-  allStandards.value.forEach(s => {
-    s.hasMelody = melodyTitles.has(s.title.toLowerCase())
-  })
-}
-
 // Actions
 function generateSong() {
   harmonyStore.generateSongForm(selectedForm.value)
@@ -288,14 +191,6 @@ function generateSong() {
 
 function selectStandard(standard) {
   selectedItem.value = { ...standard, type: 'standard' }
-}
-
-function selectTranscription(item) {
-  selectedItem.value = { ...item, type: 'transcription' }
-}
-
-function selectHead(item) {
-  selectedItem.value = { ...item, type: 'head' }
 }
 
 function loadSavedProgression(prog) {
@@ -324,13 +219,6 @@ function loadSelected() {
         section: idx === 0 ? 'A' : null
       }
     })
-  }
-
-  // Load melody if available
-  if (item.melody) {
-    harmonyStore.loadMelody(item.melody)
-  } else {
-    harmonyStore.loadMelody(null) // Clear any existing melody
   }
 
   harmonyStore.setKey(key)
@@ -462,10 +350,6 @@ function loadSelected() {
   border-color: var(--accent-blue);
 }
 
-.list-item.has-melody {
-  border-left: 3px solid var(--accent-green);
-}
-
 .item-title {
   font-size: 12px;
   font-weight: 500;
@@ -479,11 +363,6 @@ function loadSelected() {
   font-size: 10px;
   color: var(--text-muted);
   margin-top: 2px;
-}
-
-.melody-badge {
-  font-size: 10px;
-  color: var(--accent-green);
 }
 
 .list-footer {

@@ -19,7 +19,6 @@ import { ref, onMounted, onUnmounted, watch, computed } from 'vue'
 import { useHarmonyStore } from '../stores/harmony'
 import { JAZZ_DEGREES } from '../engine/JazzDegrees.js'
 import { getVoicing } from '../engine/Voicings.js'
-import { parseMelody } from '../engine/MelodyParser.js'
 
 const harmonyStore = useHarmonyStore()
 const canvasRef = ref(null)
@@ -42,16 +41,9 @@ const colors = {
   gridBeat: '#30363d',
   bass: '#58a6ff',
   chord: '#a371f7',
-  melody: '#f0883e',  // Orange for melody
   playhead: '#f85149',
   noteActive: '#3fb950'
 }
-
-// Parsed melody notes
-const parsedMelody = computed(() => {
-  if (!harmonyStore.currentMelody) return []
-  return parseMelody(harmonyStore.currentMelody)
-})
 
 // Generate visible notes for piano keys
 const visibleNotes = computed(() => {
@@ -177,9 +169,6 @@ function draw() {
   // Draw chord notes (bass + chords)
   drawNotes()
 
-  // Draw melody notes on top
-  drawMelody()
-
   // Draw playhead
   drawPlayhead()
 }
@@ -275,55 +264,6 @@ function drawNotes() {
         ctx.globalAlpha = 1
       }
     })
-  })
-}
-
-function drawMelody() {
-  const melody = parsedMelody.value
-  if (melody.length === 0) return
-  if (!harmonyStore.melodyEnabled) return
-
-  const noteHeight = canvasHeight / pitchRange
-  const beatsPerMeasure = 4
-
-  // Calculate melody duration
-  const melodyDuration = melody.length > 0
-    ? melody[melody.length - 1].startBeat + melody[melody.length - 1].duration
-    : 0
-
-  if (melodyDuration === 0) return
-
-  // Use melody duration to determine canvas scale (no artificial scaling)
-  const pixelsPerBeat = canvasWidth / melodyDuration
-
-  // Calculate beats per chord for current measure highlighting
-  const beatsPerChord = harmonyStore.progression.length > 0
-    ? melodyDuration / harmonyStore.progression.length
-    : beatsPerMeasure
-
-  melody.forEach(note => {
-    if (note.isRest || note.pitch === null) return
-    if (note.pitch < minPitch || note.pitch > maxPitch) return
-
-    const x = note.startBeat * pixelsPerBeat
-    const width = Math.max(note.duration * pixelsPerBeat - 2, 4)
-    const y = (maxPitch - note.pitch) * noteHeight
-
-    // Check if this note is in the current chord
-    const noteChordIndex = Math.floor(note.startBeat / beatsPerChord)
-    const isCurrentMeasure = noteChordIndex === harmonyStore.currentMeasure
-
-    // Draw melody note (rounded rectangle)
-    ctx.fillStyle = isCurrentMeasure ? '#ffa657' : colors.melody
-    ctx.globalAlpha = isCurrentMeasure ? 1 : 0.8
-
-    // Rounded rectangle
-    const radius = 2
-    ctx.beginPath()
-    ctx.roundRect(x, y, width, noteHeight - 1, radius)
-    ctx.fill()
-
-    ctx.globalAlpha = 1
   })
 }
 

@@ -10,9 +10,7 @@ import { JazzSynth, getJazzSynth, disposeJazzSynth } from './JazzSynth.js'
 import { SampledPiano, getSampledPiano, disposeSampledPiano } from './SampledPiano.js'
 import { WalkingBass, getWalkingBass, disposeWalkingBass } from './WalkingBass.js'
 import { Drummer, getDrummer, disposeDrummer } from './Drummer.js'
-import { MelodySynth, getMelodySynth, disposeMelodySynth } from './MelodySynth.js'
 import { initAudio, setTempo, setSwing, midiToNote, midiArrayToNotes } from './ToneSetup.js'
-import { parseMelody } from '../engine/MelodyParser.js'
 import { JAZZ_DEGREES } from '../engine/JazzDegrees.js'
 import { CHORD_TYPES } from '../engine/ChordTypes.js'
 import { getVoicing } from '../engine/Voicings.js'
@@ -65,15 +63,12 @@ export class AudioEngine {
     this.piano = null
     this.bass = null
     this.drums = null
-    this.melody = null
 
     this.isInitialized = false
     this.isPlaying = false
     this.scheduledEvents = []
 
     this.progression = []
-    this.currentMelody = null  // Raw melody string
-    this.parsedMelody = []     // Parsed melody notes
     this.currentMeasure = 0
     this.loopEnabled = true
 
@@ -84,11 +79,9 @@ export class AudioEngine {
       voicingStyle: 'shell',
       bassEnabled: true,
       drumsEnabled: true,
-      melodyEnabled: true,
       pianoVolume: 0.8,
       bassVolume: 0.7,
       drumsVolume: 0.5,
-      melodyVolume: 0.7,
       useSamples: false  // Use sampled piano instead of synthesis
     }
 
@@ -114,7 +107,6 @@ export class AudioEngine {
     this.piano = getJazzSynth()
     this.bass = getWalkingBass()
     this.drums = getDrummer()
-    this.melody = getMelodySynth()
 
     // Aplicar configuracion inicial
     this.applyConfig()
@@ -172,10 +164,6 @@ export class AudioEngine {
       this.drums.setVolumeNormalized(this.config.drumsVolume)
       this.drums.setSwing(this.config.swing)
     }
-    if (this.melody) {
-      this.melody.setVolumeNormalized(this.config.melodyVolume)
-      this.melody.setEnabled(this.config.melodyEnabled)
-    }
   }
 
   /**
@@ -195,20 +183,6 @@ export class AudioEngine {
   loadProgression(progression) {
     this.progression = progression
     this.currentMeasure = 0
-  }
-
-  /**
-   * Carga una melodia para reproducir
-   * @param {string} melodyStr - Melodia en formato .ls de Impro-Visor
-   */
-  loadMelody(melodyStr) {
-    this.currentMelody = melodyStr
-    if (melodyStr) {
-      this.parsedMelody = parseMelody(melodyStr)
-      console.log(`Melody loaded: ${this.parsedMelody.length} notes`)
-    } else {
-      this.parsedMelody = []
-    }
   }
 
   /**
@@ -265,40 +239,21 @@ export class AudioEngine {
    */
   scheduleProgression() {
     const measureDuration = Tone.Time('1m').toSeconds()
-    const beatsPerMeasure = 4
-    const beatDuration = measureDuration / beatsPerMeasure
 
-    // Calculate chord duration based on melody if available
-    let chordDuration = measureDuration // Default: 1 measure per chord
-    let totalDuration = this.progression.length * measureDuration
+    this.progression.forEach((chord, measureIndex) => {
+      const startTime = measureIndex * measureDuration
 
-    const melodyBeats = this.getMelodyDurationBeats()
-    if (melodyBeats > 0 && this.progression.length > 0) {
-      // Melody exists - calculate beats per chord
-      const beatsPerChord = melodyBeats / this.progression.length
-      chordDuration = beatsPerChord * beatDuration
-      totalDuration = melodyBeats * beatDuration
-      console.log(`Melody sync: ${melodyBeats} beats, ${this.progression.length} chords, ${beatsPerChord.toFixed(2)} beats/chord`)
-    }
-
-    this.progression.forEach((chord, chordIndex) => {
-      const startTime = chordIndex * chordDuration
-
-      // Programar cada acorde
+      // Programar cada compas
       const eventId = Tone.Transport.schedule((time) => {
-        this.playMeasure(chord, chordIndex, time)
+        this.playMeasure(chord, measureIndex, time)
       }, startTime)
 
       this.scheduledEvents.push(eventId)
     })
 
-    // Programar melodia si existe
-    if (this.parsedMelody.length > 0 && this.config.melodyEnabled) {
-      this.scheduleMelody(measureDuration)
-    }
-
     // Si loop esta habilitado, programar repeat
     if (this.loopEnabled) {
+      const totalDuration = this.progression.length * measureDuration
       Tone.Transport.loopEnd = totalDuration
       Tone.Transport.loop = true
     }
@@ -312,43 +267,6 @@ export class AudioEngine {
       }, '4n')
       this.scheduledEvents.push(beatEventId)
     }
-  }
-
-  /**
-   * Programa las notas de melodia (sin escalado - usa tiempos originales)
-   */
-  scheduleMelody(measureDuration) {
-    if (!this.melody || this.parsedMelody.length === 0) return
-
-    const beatsPerMeasure = 4
-    const beatDuration = measureDuration / beatsPerMeasure
-
-    this.parsedMelody.forEach(note => {
-      if (note.isRest || note.pitch === null) return
-
-      // Use original timing - no scaling
-      const startTime = note.startBeat * beatDuration
-      const noteDuration = note.duration * beatDuration
-
-      // Convert MIDI pitch to note name
-      const noteName = midiToNote(note.pitch)
-
-      // Schedule the note
-      const eventId = Tone.Transport.schedule((time) => {
-        this.melody.playNote(noteName, noteDuration, time)
-      }, startTime)
-
-      this.scheduledEvents.push(eventId)
-    })
-  }
-
-  /**
-   * Get melody duration in beats
-   */
-  getMelodyDurationBeats() {
-    if (this.parsedMelody.length === 0) return 0
-    const lastNote = this.parsedMelody[this.parsedMelody.length - 1]
-    return lastNote ? lastNote.startBeat + lastNote.duration : 0
   }
 
   /**
@@ -514,20 +432,6 @@ export class AudioEngine {
     this.config.drumsEnabled = enabled
   }
 
-  setMelodyVolume(value) {
-    this.config.melodyVolume = value
-    if (this.melody) {
-      this.melody.setVolumeNormalized(value)
-    }
-  }
-
-  setMelodyEnabled(enabled) {
-    this.config.melodyEnabled = enabled
-    if (this.melody) {
-      this.melody.setEnabled(enabled)
-    }
-  }
-
   /**
    * Registra callback para beats
    */
@@ -587,13 +491,11 @@ export class AudioEngine {
     disposeJazzSynth()
     disposeWalkingBass()
     disposeDrummer()
-    disposeMelodySynth()
     disposeSampledPiano()
 
     this.piano = null
     this.bass = null
     this.drums = null
-    this.melody = null
     this.sampledPiano = null
     this.samplesLoaded = false
     this.isInitialized = false
