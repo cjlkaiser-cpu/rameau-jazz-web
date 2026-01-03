@@ -43,11 +43,20 @@ const functionColors = {
   'coltrane': '#58a6ff' // Coltrane - azul
 }
 
-// Grados mas comunes para mostrar (no todos los 38)
+// Grados para mostrar (20 de 38 - los más útiles)
 const commonDegrees = [
+  // Diatónicos
   'Imaj7', 'IIm7', 'IIIm7', 'IVmaj7', 'V7', 'VIm7', 'VIIm7b5',
-  'bII7', 'V7/ii', 'V7/V', '#Idim7', '#IVdim7',
-  'bVImaj7', 'IVm7', 'V7alt'
+  // Dominantes secundarios (todos)
+  'V7/ii', 'V7/V', 'V7/IV', 'V7/vi',
+  // Tritono sub + alterados
+  'bII7', 'V7alt',
+  // Disminuidos de paso
+  '#Idim7', '#IVdim7',
+  // Borrowed
+  'bVImaj7', 'IVm7',
+  // Coltrane (Giant Steps)
+  'bIII7', 'bVI7', 'VI7'
 ]
 
 onMounted(() => {
