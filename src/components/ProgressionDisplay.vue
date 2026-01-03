@@ -388,22 +388,25 @@ function onDrop(index) {
 <style scoped>
 .progression-display {
   flex: 1;
-  overflow-x: auto;
-  white-space: nowrap;
+  overflow: auto;
   padding: 8px 0;
   position: relative;
 }
 
 .chord-sequence {
   display: flex;
-  align-items: center;
-  gap: 4px;
+  align-items: flex-start;
+  gap: 6px 4px;
+  flex-wrap: wrap;
+  padding-top: 20px; /* Space for section markers */
+  row-gap: 24px; /* More space between rows for markers */
 }
 
 .chord-item-wrapper {
   display: inline-flex;
   align-items: center;
   position: relative;
+  margin-bottom: 4px;
 }
 
 .chord-item {

@@ -69,8 +69,15 @@
       <PianoRoll />
     </section>
 
-    <!-- Transport Bar -->
-    <footer class="app-footer">
+    <!-- Resizable Footer -->
+    <div
+      class="resize-handle footer-resize"
+      @mousedown="startFooterResize"
+      title="Arrastra para redimensionar"
+    >
+      <div class="resize-grip"></div>
+    </div>
+    <footer class="app-footer" :style="{ height: footerHeight + 'px' }">
       <TransportBar />
       <ProgressionDisplay />
     </footer>
@@ -114,6 +121,12 @@ const isResizing = ref(false)
 const minHeight = 100
 const maxHeight = 400
 
+// Footer resize
+const footerHeight = ref(60)
+const isFooterResizing = ref(false)
+const minFooterHeight = 50
+const maxFooterHeight = 200
+
 function startResize(e) {
   isResizing.value = true
   document.body.style.cursor = 'ns-resize'
@@ -121,19 +134,34 @@ function startResize(e) {
   e.preventDefault()
 }
 
+function startFooterResize(e) {
+  isFooterResizing.value = true
+  document.body.style.cursor = 'ns-resize'
+  document.body.style.userSelect = 'none'
+  e.preventDefault()
+}
+
 function onResize(e) {
-  if (!isResizing.value) return
+  if (isResizing.value) {
+    const windowHeight = window.innerHeight
+    const currentFooterHeight = footerHeight.value
+    const newHeight = windowHeight - e.clientY - currentFooterHeight - 8 // 8 for resize handle
 
-  const windowHeight = window.innerHeight
-  const footerHeight = 60
-  const newHeight = windowHeight - e.clientY - footerHeight
+    pianoRollHeight.value = Math.max(minHeight, Math.min(maxHeight, newHeight))
+  }
 
-  pianoRollHeight.value = Math.max(minHeight, Math.min(maxHeight, newHeight))
+  if (isFooterResizing.value) {
+    const windowHeight = window.innerHeight
+    const newHeight = windowHeight - e.clientY
+
+    footerHeight.value = Math.max(minFooterHeight, Math.min(maxFooterHeight, newHeight))
+  }
 }
 
 function stopResize() {
-  if (isResizing.value) {
+  if (isResizing.value || isFooterResizing.value) {
     isResizing.value = false
+    isFooterResizing.value = false
     document.body.style.cursor = ''
     document.body.style.userSelect = ''
   }
@@ -281,10 +309,16 @@ onUnmounted(() => {
 
 .app-footer {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 16px;
   padding: 12px 24px;
   background: var(--bg-secondary);
+  border-top: 1px solid var(--border-color);
+  min-height: 50px;
+  overflow: hidden;
+}
+
+.footer-resize {
   border-top: 1px solid var(--border-color);
 }
 </style>
