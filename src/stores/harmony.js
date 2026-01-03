@@ -20,6 +20,10 @@ export const useHarmonyStore = defineStore('harmony', () => {
   // === SONG FORM (v0.3.5) ===
   const songForm = ref('AABA') // Current form template
 
+  // === MELODY (v0.4.0) ===
+  const currentMelody = ref(null) // Raw melody string from .ls format
+  const melodyEnabled = ref(true) // Toggle melody playback
+
   // === MOTOR ===
   const currentChord = ref('Imaj7')
   const progression = ref([]) // Array of { degree, key, tension }
@@ -45,6 +49,7 @@ export const useHarmonyStore = defineStore('harmony', () => {
   const pianoVolume = ref(0.8)
   const bassVolume = ref(0.7)
   const drumsVolume = ref(0.5)
+  const melodyVolume = ref(0.7)
   const bassEnabled = ref(true)
   const drumsEnabled = ref(true)
 
@@ -91,9 +96,11 @@ export const useHarmonyStore = defineStore('harmony', () => {
       voicingStyle: voicingStyle.value,
       bassEnabled: bassEnabled.value,
       drumsEnabled: drumsEnabled.value,
+      melodyEnabled: melodyEnabled.value,
       pianoVolume: pianoVolume.value,
       bassVolume: bassVolume.value,
-      drumsVolume: drumsVolume.value
+      drumsVolume: drumsVolume.value,
+      melodyVolume: melodyVolume.value
     })
   }
 
@@ -353,6 +360,30 @@ export const useHarmonyStore = defineStore('harmony', () => {
     }
   }
 
+  function setMelodyVolume(value) {
+    melodyVolume.value = Math.max(0, Math.min(1, value))
+    if (audioInitialized.value) {
+      const audioEngine = getAudioEngine()
+      audioEngine.setMelodyVolume(melodyVolume.value)
+    }
+  }
+
+  function setMelodyEnabled(enabled) {
+    melodyEnabled.value = enabled
+    if (audioInitialized.value) {
+      const audioEngine = getAudioEngine()
+      audioEngine.setMelodyEnabled(enabled)
+    }
+  }
+
+  function loadMelody(melodyStr) {
+    currentMelody.value = melodyStr
+    if (audioInitialized.value) {
+      const audioEngine = getAudioEngine()
+      audioEngine.loadMelody(melodyStr)
+    }
+  }
+
   function modulate(interval) {
     const keys = ['C', 'Db', 'D', 'Eb', 'E', 'F', 'Gb', 'G', 'Ab', 'A', 'Bb', 'B']
     const currentIndex = keys.indexOf(key.value)
@@ -526,6 +557,7 @@ export const useHarmonyStore = defineStore('harmony', () => {
     pianoVolume,
     bassVolume,
     drumsVolume,
+    melodyVolume,
     bassEnabled,
     drumsEnabled,
     showForceGraph,
@@ -555,6 +587,9 @@ export const useHarmonyStore = defineStore('harmony', () => {
     setVolume,
     setBassEnabled,
     setDrumsEnabled,
+    setMelodyVolume,
+    setMelodyEnabled,
+    loadMelody,
     modulate,
     previewChord,
     getCurrentChordInfo,
@@ -575,6 +610,10 @@ export const useHarmonyStore = defineStore('harmony', () => {
     songForm,
     generateSongForm,
     loadProgression,
-    FORM_TEMPLATES
+    FORM_TEMPLATES,
+
+    // Melody (v0.4.0)
+    currentMelody,
+    melodyEnabled
   }
 })

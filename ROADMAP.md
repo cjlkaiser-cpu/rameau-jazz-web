@@ -107,41 +107,43 @@
 
 ---
 
-### v0.4.0 - Constraints & Analysis (En progreso)
-**Objetivo**: Mayor control sobre las restricciones
+### v0.4.0 - Melodías y Audio HQ (Completado)
+**Objetivo**: Reproducir melodías de standards y mejorar calidad de audio
 
-#### Constraints
-- [ ] **Forzar cadencias** - V-I al final, ii-V-I, etc.
-- [ ] **Bloquear acordes** - Mantener acordes específicos fijos
-- [ ] **Excluir acordes** - Blacklist de grados no deseados
-- [ ] **Longitud variable** - 4, 8, 12, 16, 32 compases
+#### Melodías de Standards
+- [x] **MelodyParser.js** - Parser de notación Impro-Visor (.ls)
+- [x] **316 melodías extraídas** - De solos, heads y transcripciones
+- [x] **Categorización** - melodies.json, transcriptions.json, heads.json
+- [x] **Indicadores visuales** - Badge de nota musical en items con melodía
 
-#### Análisis
-- [ ] **Detección de patrones** - ii-V-I, turnarounds, etc.
-- [ ] **Sugerencias contextuales** - "Prueba un bII7 aquí"
-- [ ] **Comparación con standards** - Similitud con temas conocidos
+#### UI de Biblioteca
+- [x] **LibraryPanel con tabs** - Generar, Mis Temas, Standards, Heads, Solos
+- [x] **Búsqueda en tiempo real** - Filtro por título/compositor
+- [x] **Preview de selección** - Panel con info antes de cargar
+- [x] **Integración de melodía** - Auto-carga al seleccionar standard
+
+#### Visualización de Melodía
+- [x] **Track de melodía en PianoRoll** - Color naranja (#f0883e)
+- [x] **Notas redondeadas** - Distintas de acordes
+- [x] **Escalado automático** - Melodía se ajusta a duración de progresión
+- [x] **Highlight de compás actual** - Brillo en notas del compás activo
+
+#### Audio de Melodía
+- [x] **MelodySynth.js** - MonoSynth tipo trompeta/sax
+- [x] **Efectos** - Vibrato, delay, reverb, compressor
+- [x] **Control de volumen** - Slider en mixer
+- [x] **Toggle ON/OFF** - Habilitar/deshabilitar melodía
+
+#### Audio de Alta Calidad (HQ)
+- [x] **SampledPiano.js** - Salamander Grand Piano samples
+- [x] **30 samples por octava** - Interpolación automática
+- [x] **Carga asíncrona** - No bloquea inicio de app
+- [x] **Botón HQ en Mixer** - Toggle para cargar/usar samples
+- [x] **Fallback a síntesis** - Si samples no cargan
 
 ---
 
-### v0.4.0 - Melodía
-**Objetivo**: Generar líneas melódicas sobre la armonía
-
-#### Motor de Melodía
-- [ ] **Notas de acorde** - Arpegios básicos
-- [ ] **Aproximaciones cromáticas** - Bebop vocabulary
-- [ ] **Escalas por acorde** - Modos correctos automáticamente
-- [ ] **Frases de vocabulario** - Licks y patrones comunes
-- [ ] **Contorno melódico** - Control de dirección y rango
-
-#### UI de Melodía
-- [ ] **Track de melodía** en piano roll
-- [ ] **Densidad rítmica** - Slider corcheas a semicorcheas
-- [ ] **Registro** - Rango de la melodía
-- [ ] **Solo/Mute** por track
-
----
-
-### v0.5.0 - Modos y Escalas
+### v0.5.0 - Modos y Escalas (Futuro)
 **Objetivo**: Soporte completo para armonía modal
 
 #### Modos

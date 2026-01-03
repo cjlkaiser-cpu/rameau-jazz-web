@@ -48,7 +48,7 @@
         <div class="controls-stack">
           <KeySelector />
           <GravitySlider />
-          <SongFormPanel />
+          <LibraryPanel />
           <ModulationPanel />
           <VoicingSelector />
           <TensionMeter />
@@ -100,7 +100,7 @@ import ProgressionDisplay from './components/ProgressionDisplay.vue'
 import TensionMeter from './components/TensionMeter.vue'
 import SavedProgressions from './components/SavedProgressions.vue'
 import CustomPresets from './components/CustomPresets.vue'
-import SongFormPanel from './components/SongFormPanel.vue'
+import LibraryPanel from './components/LibraryPanel.vue'
 
 // Visualization
 import ForceGraph from './visualization/ForceGraph.vue'

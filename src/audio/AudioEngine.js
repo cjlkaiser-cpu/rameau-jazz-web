@@ -7,9 +7,12 @@
 
 import * as Tone from 'tone'
 import { JazzSynth, getJazzSynth, disposeJazzSynth } from './JazzSynth.js'
+import { SampledPiano, getSampledPiano, disposeSampledPiano } from './SampledPiano.js'
 import { WalkingBass, getWalkingBass, disposeWalkingBass } from './WalkingBass.js'
 import { Drummer, getDrummer, disposeDrummer } from './Drummer.js'
+import { MelodySynth, getMelodySynth, disposeMelodySynth } from './MelodySynth.js'
 import { initAudio, setTempo, setSwing, midiToNote, midiArrayToNotes } from './ToneSetup.js'
+import { parseMelody } from '../engine/MelodyParser.js'
 import { JAZZ_DEGREES } from '../engine/JazzDegrees.js'
 import { CHORD_TYPES } from '../engine/ChordTypes.js'
 import { getVoicing } from '../engine/Voicings.js'
@@ -62,12 +65,15 @@ export class AudioEngine {
     this.piano = null
     this.bass = null
     this.drums = null
+    this.melody = null
 
     this.isInitialized = false
     this.isPlaying = false
     this.scheduledEvents = []
 
     this.progression = []
+    this.currentMelody = null  // Raw melody string
+    this.parsedMelody = []     // Parsed melody notes
     this.currentMeasure = 0
     this.loopEnabled = true
 
@@ -78,10 +84,17 @@ export class AudioEngine {
       voicingStyle: 'shell',
       bassEnabled: true,
       drumsEnabled: true,
+      melodyEnabled: true,
       pianoVolume: 0.8,
       bassVolume: 0.7,
-      drumsVolume: 0.5
+      drumsVolume: 0.5,
+      melodyVolume: 0.7,
+      useSamples: false  // Use sampled piano instead of synthesis
     }
+
+    // Sample loading state
+    this.samplesLoaded = false
+    this.sampledPiano = null
 
     // Callback para actualizar UI
     this.onBeatCallback = null
@@ -101,6 +114,7 @@ export class AudioEngine {
     this.piano = getJazzSynth()
     this.bass = getWalkingBass()
     this.drums = getDrummer()
+    this.melody = getMelodySynth()
 
     // Aplicar configuracion inicial
     this.applyConfig()
@@ -108,6 +122,37 @@ export class AudioEngine {
     this.isInitialized = true
     console.log('AudioEngine initialized')
     return true
+  }
+
+  /**
+   * Load sampled piano (for higher quality audio)
+   * Call this after init() to upgrade to sampled sounds
+   */
+  async loadSamples() {
+    if (this.samplesLoaded) return true
+
+    console.log('Loading Salamander piano samples...')
+    this.sampledPiano = getSampledPiano()
+    const success = await this.sampledPiano.load()
+
+    if (success) {
+      this.samplesLoaded = true
+      this.config.useSamples = true
+      // Apply current volume to sampled piano
+      this.sampledPiano.setVolumeNormalized(this.config.pianoVolume)
+      console.log('Samples loaded - using high quality audio')
+    } else {
+      console.warn('Failed to load samples - using synthesis')
+    }
+
+    return success
+  }
+
+  /**
+   * Toggle between sampled and synthesized piano
+   */
+  setUseSamples(enabled) {
+    this.config.useSamples = enabled && this.samplesLoaded
   }
 
   /**
@@ -126,6 +171,10 @@ export class AudioEngine {
     if (this.drums) {
       this.drums.setVolumeNormalized(this.config.drumsVolume)
       this.drums.setSwing(this.config.swing)
+    }
+    if (this.melody) {
+      this.melody.setVolumeNormalized(this.config.melodyVolume)
+      this.melody.setEnabled(this.config.melodyEnabled)
     }
   }
 
@@ -146,6 +195,20 @@ export class AudioEngine {
   loadProgression(progression) {
     this.progression = progression
     this.currentMeasure = 0
+  }
+
+  /**
+   * Carga una melodia para reproducir
+   * @param {string} melodyStr - Melodia en formato .ls de Impro-Visor
+   */
+  loadMelody(melodyStr) {
+    this.currentMelody = melodyStr
+    if (melodyStr) {
+      this.parsedMelody = parseMelody(melodyStr)
+      console.log(`Melody loaded: ${this.parsedMelody.length} notes`)
+    } else {
+      this.parsedMelody = []
+    }
   }
 
   /**
@@ -214,6 +277,11 @@ export class AudioEngine {
       this.scheduledEvents.push(eventId)
     })
 
+    // Programar melodia si existe
+    if (this.parsedMelody.length > 0 && this.config.melodyEnabled) {
+      this.scheduleMelody(measureDuration)
+    }
+
     // Si loop esta habilitado, programar repeat
     if (this.loopEnabled) {
       const totalDuration = this.progression.length * measureDuration
@@ -230,6 +298,44 @@ export class AudioEngine {
       }, '4n')
       this.scheduledEvents.push(beatEventId)
     }
+  }
+
+  /**
+   * Programa las notas de melodia
+   */
+  scheduleMelody(measureDuration) {
+    if (!this.melody || this.parsedMelody.length === 0) return
+
+    const beatsPerMeasure = 4
+    const beatDuration = measureDuration / beatsPerMeasure
+    const totalProgressionBeats = this.progression.length * beatsPerMeasure
+
+    // Calculate melody total duration for scaling
+    const lastNote = this.parsedMelody[this.parsedMelody.length - 1]
+    const melodyDuration = lastNote ? lastNote.startBeat + lastNote.duration : 0
+
+    // Scale factor to fit melody to progression length
+    const scale = melodyDuration > 0 ? totalProgressionBeats / melodyDuration : 1
+
+    this.parsedMelody.forEach(note => {
+      if (note.isRest || note.pitch === null) return
+
+      const scaledStart = note.startBeat * scale
+      const scaledDuration = note.duration * scale
+
+      const startTime = scaledStart * beatDuration
+      const noteDuration = scaledDuration * beatDuration
+
+      // Convert MIDI pitch to note name
+      const noteName = midiToNote(note.pitch)
+
+      // Schedule the note
+      const eventId = Tone.Transport.schedule((time) => {
+        this.melody.playNote(noteName, noteDuration, time)
+      }, startTime)
+
+      this.scheduledEvents.push(eventId)
+    })
   }
 
   /**
@@ -288,7 +394,12 @@ export class AudioEngine {
     const noteNames = midiArrayToNotes(allNotes)
 
     // Duracion: casi todo el compas
-    this.piano.playChord(noteNames, '2n.', time)
+    // Use sampled piano if available, otherwise synthesis
+    if (this.config.useSamples && this.sampledPiano?.isLoaded) {
+      this.sampledPiano.playChord(noteNames, '2n.', time)
+    } else {
+      this.piano.playChord(noteNames, '2n.', time)
+    }
   }
 
   /**
@@ -346,6 +457,9 @@ export class AudioEngine {
     if (this.piano) {
       this.piano.setVolumeNormalized(value)
     }
+    if (this.sampledPiano) {
+      this.sampledPiano.setVolumeNormalized(value)
+    }
   }
 
   setBassVolume(value) {
@@ -385,6 +499,20 @@ export class AudioEngine {
 
   setDrumsEnabled(enabled) {
     this.config.drumsEnabled = enabled
+  }
+
+  setMelodyVolume(value) {
+    this.config.melodyVolume = value
+    if (this.melody) {
+      this.melody.setVolumeNormalized(value)
+    }
+  }
+
+  setMelodyEnabled(enabled) {
+    this.config.melodyEnabled = enabled
+    if (this.melody) {
+      this.melody.setEnabled(enabled)
+    }
   }
 
   /**
@@ -428,7 +556,12 @@ export class AudioEngine {
     const allNotes = [...voicing.left, ...voicing.right]
     const noteNames = midiArrayToNotes(allNotes)
 
-    this.piano.playChord(noteNames, '2n')
+    // Use sampled piano if available
+    if (this.config.useSamples && this.sampledPiano?.isLoaded) {
+      this.sampledPiano.playChord(noteNames, '2n')
+    } else {
+      this.piano.playChord(noteNames, '2n')
+    }
   }
 
   /**
@@ -441,10 +574,15 @@ export class AudioEngine {
     disposeJazzSynth()
     disposeWalkingBass()
     disposeDrummer()
+    disposeMelodySynth()
+    disposeSampledPiano()
 
     this.piano = null
     this.bass = null
     this.drums = null
+    this.melody = null
+    this.sampledPiano = null
+    this.samplesLoaded = false
     this.isInitialized = false
   }
 }
