@@ -76,7 +76,7 @@
 - [x] **Drag & drop acordes** - Reordenar progresión
 - [x] **Click para cambiar acorde** - Selector contextual (ChordPicker dropdown)
 - [x] **Insertar/eliminar acordes** - En cualquier posición
-- [ ] **Copiar/pegar secciones** - Clipboard de acordes
+- [x] **Copiar/pegar secciones** - Clipboard de acordes (Ctrl+C/V, Shift+Click)
 
 #### Constraints
 - [ ] **Forzar cadencias** - V-I al final, ii-V-I, etc.

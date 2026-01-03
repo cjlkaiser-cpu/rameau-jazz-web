@@ -1,5 +1,19 @@
 <template>
-  <div class="progression-display">
+  <div class="progression-display" tabindex="0" @keydown="onKeyDown" ref="containerRef">
+    <!-- Clipboard toolbar (visible when selection exists) -->
+    <div class="clipboard-toolbar" v-if="selectedIndices.size > 0">
+      <span class="selection-info">{{ selectedIndices.size }} seleccionados</span>
+      <button class="toolbar-btn" @click="copySelection" title="Copiar (Ctrl+C)">
+        <span>Copiar</span>
+      </button>
+      <button class="toolbar-btn" @click="pasteAfterSelection" :disabled="!hasClipboard" title="Pegar (Ctrl+V)">
+        <span>Pegar</span>
+      </button>
+      <button class="toolbar-btn clear-btn" @click="clearSelection" title="Deseleccionar (Esc)">
+        <span>×</span>
+      </button>
+    </div>
+
     <div class="chord-sequence" v-if="progression.length > 0">
       <!-- Chord items with editing controls -->
       <div
@@ -11,7 +25,7 @@
       >
         <!-- Insert before button (visible on hover) -->
         <button
-          v-if="hoveredIndex === idx && !isDragging"
+          v-if="hoveredIndex === idx && !isDragging && selectedIndices.size === 0"
           class="insert-btn"
           @click.stop="openPickerForInsert(idx, $event)"
           title="Insertar acorde antes"
@@ -24,11 +38,12 @@
           class="chord-item"
           :class="{
             active: idx === currentIndex,
+            selected: selectedIndices.has(idx),
             dragging: dragIndex === idx,
             'drag-over': dropTargetIndex === idx && dropTargetIndex !== dragIndex
           }"
           draggable="true"
-          @click="openPicker(idx, $event)"
+          @click="onChordClick(idx, $event)"
           @dragstart="onDragStart(idx, $event)"
           @dragend="onDragEnd"
           @dragover.prevent="onDragOver(idx)"
@@ -45,7 +60,7 @@
 
           <!-- Delete button (visible on hover) -->
           <button
-            v-if="hoveredIndex === idx && progression.length > 1 && !isDragging"
+            v-if="hoveredIndex === idx && progression.length > 1 && !isDragging && selectedIndices.size === 0"
             class="delete-btn"
             @click.stop="removeChord(idx)"
             title="Eliminar acorde"
@@ -84,7 +99,7 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
+import { ref, computed, reactive } from 'vue'
 import { useHarmonyStore } from '../stores/harmony'
 import ChordPicker from './ChordPicker.vue'
 
@@ -94,6 +109,10 @@ const harmonyStore = useHarmonyStore()
 const progression = computed(() => harmonyStore.progression)
 const baseKey = computed(() => harmonyStore.key)
 const currentIndex = computed(() => harmonyStore.currentMeasure)
+const hasClipboard = computed(() => harmonyStore.hasClipboard())
+
+// Container ref for focus
+const containerRef = ref(null)
 
 // Picker state
 const pickerOpen = ref(false)
@@ -109,6 +128,10 @@ const insertMode = ref(false) // true when inserting, false when editing
 // Hover state
 const hoveredIndex = ref(null)
 
+// Selection state
+const selectedIndices = reactive(new Set())
+const lastSelectedIndex = ref(null)
+
 // Drag state
 const isDragging = ref(false)
 const dragIndex = ref(null)
@@ -123,6 +146,98 @@ function getChordClass(degree) {
     return 'chord-dominant'
   }
   return 'chord-subdominant'
+}
+
+// Selection methods
+function onChordClick(index, event) {
+  if (isDragging.value) return
+
+  if (event.shiftKey && lastSelectedIndex.value !== null) {
+    // Shift+Click: select range
+    const start = Math.min(lastSelectedIndex.value, index)
+    const end = Math.max(lastSelectedIndex.value, index)
+    for (let i = start; i <= end; i++) {
+      selectedIndices.add(i)
+    }
+  } else if (event.ctrlKey || event.metaKey) {
+    // Ctrl/Cmd+Click: toggle selection
+    if (selectedIndices.has(index)) {
+      selectedIndices.delete(index)
+    } else {
+      selectedIndices.add(index)
+    }
+    lastSelectedIndex.value = index
+  } else {
+    // Normal click: open picker (clear selection first)
+    if (selectedIndices.size > 0) {
+      clearSelection()
+    }
+    openPicker(index, event)
+    return
+  }
+
+  lastSelectedIndex.value = index
+}
+
+function clearSelection() {
+  selectedIndices.clear()
+  lastSelectedIndex.value = null
+}
+
+function copySelection() {
+  if (selectedIndices.size === 0) return
+  harmonyStore.copyChords([...selectedIndices])
+}
+
+function pasteAfterSelection() {
+  if (!hasClipboard.value) return
+
+  // Paste after last selected, or at end
+  let pasteIndex = progression.value.length
+  if (selectedIndices.size > 0) {
+    pasteIndex = Math.max(...selectedIndices) + 1
+  }
+
+  harmonyStore.pasteChords(pasteIndex)
+  clearSelection()
+}
+
+function onKeyDown(event) {
+  // Ctrl/Cmd+C: Copy
+  if ((event.ctrlKey || event.metaKey) && event.key === 'c') {
+    if (selectedIndices.size > 0) {
+      event.preventDefault()
+      copySelection()
+    }
+    return
+  }
+
+  // Ctrl/Cmd+V: Paste
+  if ((event.ctrlKey || event.metaKey) && event.key === 'v') {
+    if (hasClipboard.value) {
+      event.preventDefault()
+      pasteAfterSelection()
+    }
+    return
+  }
+
+  // Escape: Clear selection
+  if (event.key === 'Escape') {
+    if (selectedIndices.size > 0) {
+      event.preventDefault()
+      clearSelection()
+    }
+    return
+  }
+
+  // Ctrl/Cmd+A: Select all
+  if ((event.ctrlKey || event.metaKey) && event.key === 'a') {
+    event.preventDefault()
+    for (let i = 0; i < progression.value.length; i++) {
+      selectedIndices.add(i)
+    }
+    lastSelectedIndex.value = progression.value.length - 1
+  }
 }
 
 // Picker methods
@@ -432,5 +547,62 @@ function onDrop(index) {
   background: var(--accent-blue);
   border-color: var(--accent-blue);
   color: white;
+}
+
+/* Clipboard toolbar */
+.clipboard-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  background: var(--bg-tertiary);
+  border-radius: var(--radius-md);
+  margin-bottom: 8px;
+  border: 1px solid var(--accent-blue);
+}
+
+.selection-info {
+  font-size: 12px;
+  color: var(--accent-blue);
+  font-weight: 500;
+}
+
+.toolbar-btn {
+  padding: 4px 10px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-size: 11px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.toolbar-btn:hover:not(:disabled) {
+  background: var(--accent-blue);
+  border-color: var(--accent-blue);
+  color: white;
+}
+
+.toolbar-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.toolbar-btn.clear-btn {
+  padding: 4px 8px;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.toolbar-btn.clear-btn:hover {
+  background: var(--accent-red);
+  border-color: var(--accent-red);
+}
+
+/* Selected chord state */
+.chord-item.selected .chord-badge {
+  outline: 2px solid var(--accent-blue);
+  outline-offset: 2px;
 }
 </style>

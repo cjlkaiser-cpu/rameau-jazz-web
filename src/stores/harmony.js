@@ -12,6 +12,9 @@ export const useHarmonyStore = defineStore('harmony', () => {
   const key = ref('C')
   const mode = ref('major') // 'major' | 'minor'
 
+  // === CLIPBOARD (v0.3.0) ===
+  const clipboard = ref([]) // Array of {degree, key, tension}
+
   // === MOTOR ===
   const currentChord = ref('Imaj7')
   const progression = ref([]) // Array of { degree, key, tension }
@@ -420,6 +423,40 @@ export const useHarmonyStore = defineStore('harmony', () => {
     reloadAudioProgression()
   }
 
+  /**
+   * Copy chords to clipboard
+   * @param {number[]} indices - Array of indices to copy
+   */
+  function copyChords(indices) {
+    if (!indices || indices.length === 0) return
+
+    const sorted = [...indices].sort((a, b) => a - b)
+    clipboard.value = sorted
+      .filter(i => i >= 0 && i < progression.value.length)
+      .map(i => ({ ...progression.value[i] }))
+  }
+
+  /**
+   * Paste chords from clipboard at position
+   * @param {number} atIndex - Position to insert at
+   */
+  function pasteChords(atIndex) {
+    if (clipboard.value.length === 0) return
+
+    const insertAt = Math.min(Math.max(0, atIndex), progression.value.length)
+    const cloned = clipboard.value.map(c => ({ ...c }))
+
+    progression.value.splice(insertAt, 0, ...cloned)
+    reloadAudioProgression()
+  }
+
+  /**
+   * Check if clipboard has content
+   */
+  function hasClipboard() {
+    return clipboard.value.length > 0
+  }
+
   return {
     // State
     key,
@@ -479,6 +516,12 @@ export const useHarmonyStore = defineStore('harmony', () => {
     updateChordAt,
     insertChordAt,
     removeChordAt,
-    moveChord
+    moveChord,
+
+    // Clipboard (v0.3.0)
+    clipboard,
+    copyChords,
+    pasteChords,
+    hasClipboard
   }
 })
