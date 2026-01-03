@@ -1,42 +1,43 @@
 /**
- * SoloEngine.js - Integración del generador LSTM con el motor de audio
+ * SoloEngine.js - Product of Experts LSTM Solo Generator
  *
- * Genera solos de jazz usando el modelo Clifford Brown LSTM
- * y los reproduce sincronizado con la progresión.
+ * Implements Impro-Visor's Product of Experts architecture:
+ * - Expert 0: IntervalRelativeNoteEncoding (melodic intervals)
+ * - Expert 1: ChordRelativeNoteEncoding (harmonic fit)
+ *
+ * The probabilities from both experts are multiplied together,
+ * ensuring notes are BOTH melodically smooth AND harmonically correct.
  */
 
 import * as tf from '@tensorflow/tfjs'
 import * as Tone from 'tone'
 import { JAZZ_DEGREES } from '../engine/JazzDegrees.js'
 
-// Constantes del modelo (deben coincidir con JazzLSTM.js)
+// Constants
 const HIDDEN_SIZE = 300
-const INPUT_SIZE = 50
-const OUTPUT_SIZE = 27  // rest + continue + 25 pitch classes (2 octaves)
-
-const BEAT_PERIODS = [48, 24, 12, 6, 3, 16, 8, 4, 2]
 const LOW_BOUND = 48  // C3
 const HIGH_BOUND = 84 // C6
+const PITCH_RANGE = HIGH_BOUND - LOW_BOUND  // 36 notes
 
+const BEAT_PERIODS = [48, 24, 12, 6, 3, 16, 8, 4, 2]
 const NOTE_NAMES = ['C', 'Db', 'D', 'Eb', 'E', 'F', 'Gb', 'G', 'Ab', 'A', 'Bb', 'B']
 
-// Mapeo de tonalidades a semitono base
 const KEY_TO_SEMITONE = {
   'C': 0, 'Db': 1, 'D': 2, 'Eb': 3, 'E': 4, 'F': 5,
   'Gb': 6, 'G': 7, 'Ab': 8, 'A': 9, 'Bb': 10, 'B': 11
 }
 
-// Codificación de tipos de acorde como 12-bit vectors
+// Chord type vectors (12-bit pitch class sets)
 const CHORD_TYPE_VECTORS = {
   'maj7':     [1,0,0,0,1,0,0,1,0,0,0,1],
-  'maj9':     [1,0,0,0,1,0,0,1,0,0,0,1],
+  'maj9':     [1,0,1,0,1,0,0,1,0,0,0,1],
   '6':        [1,0,0,0,1,0,0,1,0,1,0,0],
   'maj7#11':  [1,0,0,0,1,0,1,1,0,0,0,1],
   'm7':       [1,0,0,1,0,0,0,1,0,0,1,0],
-  'm9':       [1,0,0,1,0,0,0,1,0,0,1,0],
+  'm9':       [1,0,1,1,0,0,0,1,0,0,1,0],
   'm6':       [1,0,0,1,0,0,0,1,0,1,0,0],
   '7':        [1,0,0,0,1,0,0,1,0,0,1,0],
-  '9':        [1,0,0,0,1,0,0,1,0,0,1,0],
+  '9':        [1,0,1,0,1,0,0,1,0,0,1,0],
   '13':       [1,0,0,0,1,0,0,1,0,1,1,0],
   '7b13':     [1,0,0,0,1,0,0,1,1,0,1,0],
   '7#11':     [1,0,0,0,1,0,1,1,0,0,1,0],
@@ -52,7 +53,7 @@ const CHORD_TYPE_VECTORS = {
 }
 
 /**
- * Célula LSTM simple para TensorFlow.js
+ * LSTM Cell for TensorFlow.js
  */
 class LSTMCell {
   constructor(inputSize, hiddenSize) {
@@ -64,7 +65,6 @@ class LSTMCell {
   }
 
   loadWeights(w) {
-    // Weights are stored transposed, need to transpose for matMul
     this.weights = {
       Wi: tf.tensor2d(w.input_w.data, w.input_w.shape).transpose(),
       bi: tf.tensor1d(w.input_b.data),
@@ -113,280 +113,389 @@ class LSTMCell {
 }
 
 /**
- * Motor de generación de solos
+ * Expert network (LSTM + Dense)
+ */
+class Expert {
+  constructor(inputSize, outputSize) {
+    this.inputSize = inputSize
+    this.outputSize = outputSize
+    this.lstm1 = new LSTMCell(inputSize, HIDDEN_SIZE)
+    this.lstm2 = new LSTMCell(HIDDEN_SIZE, HIDDEN_SIZE)
+    this.denseW = null
+    this.denseB = null
+  }
+
+  loadWeights(weights) {
+    this.lstm1.loadWeights(weights.lstm1)
+    this.lstm2.loadWeights(weights.lstm2)
+    this.denseW = tf.tensor2d(weights.dense.w.data, weights.dense.w.shape).transpose()
+    this.denseB = tf.tensor1d(weights.dense.b.data)
+  }
+
+  getInitialState() {
+    return {
+      lstm1: this.lstm1.getInitialState(),
+      lstm2: this.lstm2.getInitialState()
+    }
+  }
+
+  step(input, state) {
+    const x = tf.tensor1d(input)
+
+    const { h: h1, c: c1 } = this.lstm1.step(x, state.lstm1.h, state.lstm1.c)
+    state.lstm1.h.dispose(); state.lstm1.c.dispose()
+
+    const { h: h2, c: c2 } = this.lstm2.step(h1, state.lstm2.h, state.lstm2.c)
+    state.lstm2.h.dispose(); state.lstm2.c.dispose()
+
+    const logits = tf.tidy(() => {
+      return tf.add(tf.matMul(h2.reshape([1, -1]), this.denseW).squeeze(), this.denseB)
+    })
+
+    x.dispose()
+
+    return {
+      logits,
+      state: { lstm1: { h: h1, c: c1 }, lstm2: { h: h2, c: c2 } }
+    }
+  }
+
+  dispose() {
+    this.lstm1.dispose()
+    this.lstm2.dispose()
+    if (this.denseW) this.denseW.dispose()
+    if (this.denseB) this.denseB.dispose()
+  }
+}
+
+/**
+ * Product of Experts Solo Engine
  */
 export class SoloEngine {
   constructor() {
-    this.lstm1 = null
-    this.lstm2 = null
-    this.denseW = null
-    this.denseB = null
+    this.expert0 = null  // IntervalRelative
+    this.expert1 = null  // ChordRelative
     this.loaded = false
     this.loading = false
 
-    // Sintetizador para el solo
+    // Audio
     this.synth = null
     this.scheduledEvents = []
   }
 
-  /**
-   * Carga el modelo LSTM
-   */
   async loadModel() {
     if (this.loaded || this.loading) return this.loaded
 
     this.loading = true
-    console.log('Loading Jazz LSTM model...')
+    console.log('Loading Product of Experts LSTM model...')
 
     try {
-      // Cargar pesos (usar base URL de Vite)
       const baseUrl = import.meta.env.BASE_URL || '/'
-      const response = await fetch(`${baseUrl}models/clifford_brown_lite.json`)
+      const response = await fetch(`${baseUrl}models/clifford_poe.json`)
       const model = await response.json()
 
-      // Crear células LSTM
-      this.lstm1 = new LSTMCell(INPUT_SIZE, HIDDEN_SIZE)
-      this.lstm2 = new LSTMCell(HIDDEN_SIZE, HIDDEN_SIZE)
+      // Load Expert 0 (IntervalRelative)
+      const e0 = model.experts[0]
+      this.expert0 = new Expert(e0.inputSize, e0.outputSize)
+      this.expert0.loadWeights(e0.weights)
+      console.log(`Expert 0 (${e0.name}): input=${e0.inputSize}, output=${e0.outputSize}`)
 
-      this.lstm1.loadWeights(model.weights.lstm1)
-      this.lstm2.loadWeights(model.weights.lstm2)
-
-      // Capa densa final (también transpuesta)
-      this.denseW = tf.tensor2d(model.weights.dense.w.data, model.weights.dense.w.shape).transpose()
-      this.denseB = tf.tensor1d(model.weights.dense.b.data)
+      // Load Expert 1 (ChordRelative)
+      const e1 = model.experts[1]
+      this.expert1 = new Expert(e1.inputSize, e1.outputSize)
+      this.expert1.loadWeights(e1.weights)
+      console.log(`Expert 1 (${e1.name}): input=${e1.inputSize}, output=${e1.outputSize}`)
 
       this.loaded = true
-      console.log('Jazz LSTM model loaded successfully')
+      console.log('Product of Experts model loaded successfully')
       return true
     } catch (err) {
-      console.error('Error loading LSTM model:', err)
+      console.error('Error loading PoE model:', err)
       this.loading = false
       return false
     }
   }
 
-  /**
-   * Inicializa el sintetizador del solo
-   */
   initSynth() {
     if (this.synth) return
 
-    // Synth tipo trompeta jazz - más cálido y expresivo
     this.synth = new Tone.MonoSynth({
-      oscillator: {
-        type: 'fatsawtooth',
-        spread: 20,
-        count: 3
-      },
-      envelope: {
-        attack: 0.05,
-        decay: 0.2,
-        sustain: 0.4,
-        release: 0.4
-      },
+      oscillator: { type: 'fatsawtooth', spread: 20, count: 3 },
+      envelope: { attack: 0.05, decay: 0.2, sustain: 0.4, release: 0.4 },
       filterEnvelope: {
-        attack: 0.06,
-        decay: 0.3,
-        sustain: 0.4,
-        release: 0.3,
-        baseFrequency: 400,
-        octaves: 2.5
+        attack: 0.06, decay: 0.3, sustain: 0.4, release: 0.3,
+        baseFrequency: 400, octaves: 2.5
       },
-      filter: {
-        type: 'lowpass',
-        frequency: 2000,
-        Q: 2
-      }
+      filter: { type: 'lowpass', frequency: 2000, Q: 2 }
     })
 
-    // Efectos para sonido jazz
-    this.vibrato = new Tone.Vibrato({
-      frequency: 5,
-      depth: 0.1
-    })
-
+    this.vibrato = new Tone.Vibrato({ frequency: 5, depth: 0.1 })
     const reverb = new Tone.Reverb({ decay: 2, wet: 0.25 })
     const delay = new Tone.FeedbackDelay('8n.', 0.12)
     delay.wet.value = 0.15
 
-    const eq = new Tone.EQ3({
-      low: -3,
-      mid: 2,
-      high: -2
-    })
-
-    this.synth.chain(this.vibrato, eq, delay, reverb, Tone.Destination)
-    this.synth.volume.value = -3  // Más volumen
+    this.synth.chain(this.vibrato, delay, reverb, Tone.Destination)
+    this.synth.volume.value = -3
   }
 
-  /**
-   * Codifica el beat position
-   */
+  // === ENCODING FUNCTIONS ===
+
   encodeBeat(timestep) {
     return BEAT_PERIODS.map(period => (timestep % period === 0) ? 1 : 0)
   }
 
-  /**
-   * Codifica el tipo de acorde (rotado por posición)
-   */
-  encodeChord(chordType, notePosition) {
+  encodePosition(relativePosition) {
+    const delta = (HIGH_BOUND - LOW_BOUND) / 1  // 2 divisions
+    const indicator = []
+    for (let i = 0; i < 2; i++) {
+      const center = LOW_BOUND + i * delta
+      let value = 1 - Math.abs(relativePosition - center) / delta
+      indicator.push(Math.max(0, value))
+    }
+    return indicator
+  }
+
+  encodeChord(chordType, chordRootPitchClass, relativePosition) {
     const baseVector = CHORD_TYPE_VECTORS[chordType] || CHORD_TYPE_VECTORS['maj7']
+    const distance = chordRootPitchClass - (relativePosition % 12)
+    const rotateBy = ((distance % 12) + 12) % 12
     const shifted = [...baseVector]
-    const rotateBy = (12 - notePosition % 12) % 12
     for (let i = 0; i < rotateBy; i++) {
       shifted.unshift(shifted.pop())
     }
     return shifted
   }
 
-  /**
-   * Codifica la nota previa (mismo encoding que output: 27 clases)
-   */
-  encodeNote(midiNote, chordRoot, isRest, isContinue) {
+  // Expert 0: IntervalRelativeNoteEncoding (27 outputs: rest + sustain + 25 intervals)
+  encodeInterval(currentNote, previousNote, isRest, isContinue) {
     const encoding = new Array(27).fill(0)
     if (isRest) {
       encoding[0] = 1
     } else if (isContinue) {
       encoding[1] = 1
     } else {
-      // Semitono relativo al root, centrado en index 14
-      const semitoneOffset = midiNote - chordRoot  // -12 a +12
-      const index = Math.max(2, Math.min(26, semitoneOffset + 14))
+      let delta = currentNote - previousNote
+      if (delta > 12) delta = delta % 12
+      if (delta < -12) delta = delta % 12
+      const index = Math.max(2, Math.min(26, delta + 12 + 2))
       encoding[index] = 1
     }
     return encoding
   }
 
-  /**
-   * Crea el vector de entrada completo
-   */
-  createInput(timestep, chordType, chordRoot, prevNote, isRest, isContinue) {
-    const beat = this.encodeBeat(timestep)
-    const chord = this.encodeChord(chordType, chordRoot)
-    const note = this.encodeNote(prevNote, chordRoot, isRest, isContinue)
-
-    const input = [...beat, ...chord, ...note]
-    while (input.length < INPUT_SIZE) {
-      input.push(0)
+  // Expert 1: ChordRelativeNoteEncoding (14 outputs: rest + sustain + 12 pitch classes)
+  encodePitchClass(midiNote, chordRoot, isRest, isContinue) {
+    const encoding = new Array(14).fill(0)
+    if (isRest) {
+      encoding[0] = 1
+    } else if (isContinue) {
+      encoding[1] = 1
+    } else {
+      let relIdx = (midiNote - chordRoot) % 12
+      if (relIdx < 0) relIdx += 12
+      encoding[relIdx + 2] = 1
     }
-    return input
+    return encoding
   }
 
-  /**
-   * Decodifica el índice de salida a nota MIDI
-   * Impro-Visor encoding: 0=rest, 1=continue, 2-26=25 semitones (2 octaves)
-   * El rango es desde chord_root-12 hasta chord_root+12
-   */
-  decodeOutput(index, chordRoot) {
-    if (index === 0) return { type: 'rest', note: null }
-    if (index === 1) return { type: 'continue', note: null }
-
-    // Index 2 = root - 12 semitones (octava abajo)
-    // Index 14 = root (centro)
-    // Index 26 = root + 12 semitones (octava arriba)
-    const semitoneOffset = (index - 2) - 12  // -12 a +12
-    let midiNote = chordRoot + semitoneOffset
-
-    // Ajustar al rango válido del instrumento
-    while (midiNote < LOW_BOUND) midiNote += 12
-    while (midiNote > HIGH_BOUND) midiNote -= 12
-
-    return { type: 'note', note: midiNote }
+  // Create input for Expert 0 (IntervalRelative)
+  // Input: beat(9) + position(2) + chord(12) + interval(27) = 50
+  createInputExpert0(timestep, chordType, chordRootPC, relPos, prevNote, isRest, isContinue) {
+    const beat = this.encodeBeat(timestep)
+    const position = this.encodePosition(relPos)
+    const chord = this.encodeChord(chordType, chordRootPC, relPos)
+    const interval = this.encodeInterval(relPos, prevNote, isRest, isContinue)
+    return [...beat, ...position, ...chord, ...interval]
   }
 
-  /**
-   * Obtiene el pitch base de una tonalidad
-   */
-  getKeyPitch(key) {
-    return 60 + (KEY_TO_SEMITONE[key] || 0) // C4 + offset
+  // Create input for Expert 1 (ChordRelative)
+  // Input: beat(9) + position(2) + chord(12) + pitchclass(14) = 37
+  createInputExpert1(timestep, chordType, chordRootPC, chordRoot, relPos, isRest, isContinue) {
+    const beat = this.encodeBeat(timestep)
+    const position = this.encodePosition(relPos)
+    const chord = this.encodeChord(chordType, chordRootPC, chordRoot)
+    const pitchClass = this.encodePitchClass(relPos, chordRoot, isRest, isContinue)
+    return [...beat, ...position, ...chord, ...pitchClass]
   }
 
-  /**
-   * Obtiene el pitch de la fundamental del acorde (en rango de solo)
-   */
-  getChordRoot(degree, key) {
-    const degreeInfo = JAZZ_DEGREES[degree]
-    if (!degreeInfo) return 60 + (KEY_TO_SEMITONE[key] || 0)
+  // === PROBABILITY CONVERSION ===
 
-    // Base en C4 (60) + offset de la tonalidad + root del grado
-    let root = 60 + (KEY_TO_SEMITONE[key] || 0) + degreeInfo.root
+  // Expert 0: Convert 27-output to absolute MIDI probabilities (38 = 2 artic + 36 notes)
+  intervalProbsToAbsolute(logits, relativePosition) {
+    const probs = tf.tidy(() => tf.softmax(logits))
+    const probsArr = probs.arraySync()
+    probs.dispose()
 
-    // Mantener en rango medio para el solo (C4-C5)
-    while (root < 60) root += 12
-    while (root > 72) root -= 12
+    // Output: [rest, sustain, note0, note1, ... note35]
+    const absolute = new Array(PITCH_RANGE + 2).fill(0)
+    absolute[0] = probsArr[0]  // rest
+    absolute[1] = probsArr[1]  // sustain
 
-    return root
+    // Map intervals to absolute notes
+    for (let i = 2; i < 27; i++) {
+      const interval = (i - 2) - 12  // -12 to +12
+      let midiNote = relativePosition + interval
+
+      // Clamp to valid range
+      if (midiNote >= LOW_BOUND && midiNote < HIGH_BOUND) {
+        const noteIdx = midiNote - LOW_BOUND + 2
+        absolute[noteIdx] += probsArr[i]
+      }
+    }
+
+    return absolute
   }
 
-  /**
-   * Genera un solo sobre una progresión
-   * @param {Array} progression - Array de {degree, key}
-   * @param {number} stepsPerBeat - Subdivisión (2 = corcheas, 4 = semicorcheas)
-   * @param {number} temperature - Temperatura de muestreo (0.5-1.5)
-   */
+  // Expert 1: Convert 14-output to absolute MIDI probabilities
+  pitchClassProbsToAbsolute(logits, chordRoot) {
+    const probs = tf.tidy(() => tf.softmax(logits))
+    const probsArr = probs.arraySync()
+    probs.dispose()
+
+    const absolute = new Array(PITCH_RANGE + 2).fill(0)
+    absolute[0] = probsArr[0]  // rest
+    absolute[1] = probsArr[1]  // sustain
+
+    // Tile pitch class probabilities across the range
+    const pitchClassProbs = probsArr.slice(2)
+
+    // Roll by chordRoot - LOW_BOUND to align with absolute pitches
+    const rollAmount = (chordRoot - LOW_BOUND) % 12
+    const rolled = new Array(12)
+    for (let i = 0; i < 12; i++) {
+      rolled[(i + rollAmount + 12) % 12] = pitchClassProbs[i]
+    }
+
+    // Tile across the range
+    for (let i = 0; i < PITCH_RANGE; i++) {
+      absolute[i + 2] = rolled[i % 12]
+    }
+
+    return absolute
+  }
+
+  // === GENERATION ===
+
   async generate(progression, stepsPerBeat = 2, temperature = 1.0) {
     if (!this.loaded) {
       const success = await this.loadModel()
-      if (!success) throw new Error('Could not load LSTM model')
+      if (!success) throw new Error('Could not load PoE model')
     }
 
-    console.log(`Generating solo over ${progression.length} bars...`)
+    console.log(`Generating solo with PoE over ${progression.length} bars...`)
 
     const melody = []
     let timestep = 0
-    let prevNote = 60
+
+    // State for Expert 0 (tracks melodic intervals)
+    let relativePosition = LOW_BOUND + Math.floor(Math.random() * (HIGH_BOUND - LOW_BOUND) / 2)
+    let prevNote = relativePosition
     let isRest = true
     let isContinue = false
 
-    // Inicializar estados LSTM
-    let state1 = this.lstm1.getInitialState()
-    let state2 = this.lstm2.getInitialState()
+    // LSTM states
+    let state0 = this.expert0.getInitialState()
+    let state1 = this.expert1.getInitialState()
 
     for (let measureIdx = 0; measureIdx < progression.length; measureIdx++) {
       const chord = progression[measureIdx]
       const degreeInfo = JAZZ_DEGREES[chord.degree] || { type: 'm7', root: 0 }
       const chordType = degreeInfo.type
-      const chordRoot = this.getChordRoot(chord.degree, chord.key)
+      const chordRootPC = ((KEY_TO_SEMITONE[chord.key] || 0) + degreeInfo.root + 12) % 12
+      const chordRoot = 60 + chordRootPC  // MIDI note for chord root
 
-      // 4 beats por compás * stepsPerBeat
       const stepsForChord = 4 * stepsPerBeat
 
       for (let step = 0; step < stepsForChord; step++) {
-        // Crear input
-        const inputArray = this.createInput(
-          timestep,
-          chordType,
-          chordRoot,
-          prevNote,
-          isRest,
-          isContinue
+        // Create inputs for both experts
+        const input0 = this.createInputExpert0(
+          timestep, chordType, chordRootPC, relativePosition, prevNote, isRest, isContinue
         )
-        const input = tf.tensor1d(inputArray)
+        const input1 = this.createInputExpert1(
+          timestep, chordType, chordRootPC, chordRoot, relativePosition, isRest, isContinue
+        )
 
-        // Forward pass
-        const { h: h1, c: c1 } = this.lstm1.step(input, state1.h, state1.c)
-        state1.h.dispose(); state1.c.dispose()
-        state1 = { h: h1, c: c1 }
+        // Forward pass through both experts
+        const result0 = this.expert0.step(input0, state0)
+        const result1 = this.expert1.step(input1, state1)
+        state0 = result0.state
+        state1 = result1.state
 
-        const { h: h2, c: c2 } = this.lstm2.step(h1, state2.h, state2.c)
-        state2.h.dispose(); state2.c.dispose()
-        state2 = { h: h2, c: c2 }
+        // Convert to absolute probabilities
+        const probs0 = this.intervalProbsToAbsolute(result0.logits, relativePosition)
+        const probs1 = this.pitchClassProbsToAbsolute(result1.logits, chordRoot)
 
-        // Capa densa
-        const logits = tf.tidy(() => {
-          return tf.add(tf.matMul(h2.reshape([1, -1]), this.denseW).squeeze(), this.denseB)
-        })
+        result0.logits.dispose()
+        result1.logits.dispose()
 
-        // Muestreo con temperatura
-        const sampledIndex = tf.tidy(() => {
-          const scaledLogits = logits.div(temperature)
-          const probs = tf.softmax(scaledLogits)
-          const sample = tf.multinomial(probs.reshape([1, -1]), 1)
-          return sample.dataSync()[0]
-        })
+        // PRODUCT OF EXPERTS: multiply probabilities
+        // But normalize articulation (notes) separately from rest/sustain
 
-        // Decodificar
-        const decoded = this.decodeOutput(sampledIndex, chordRoot)
+        // Multiply rest and sustain probabilities
+        const restProb = probs0[0] * probs1[0]
+        const sustainProb = probs0[1] * probs1[1]
+
+        // Multiply note probabilities
+        const noteProbs = new Array(PITCH_RANGE)
+        for (let i = 0; i < PITCH_RANGE; i++) {
+          noteProbs[i] = probs0[i + 2] * probs1[i + 2]
+        }
+
+        // Normalize notes separately
+        const noteSum = noteProbs.reduce((a, b) => a + b, 0)
+        if (noteSum > 0) {
+          for (let i = 0; i < noteProbs.length; i++) {
+            noteProbs[i] /= noteSum
+          }
+        }
+
+        // Apply temperature to notes
+        for (let i = 0; i < noteProbs.length; i++) {
+          noteProbs[i] = Math.pow(noteProbs[i], 1 / temperature)
+        }
+
+        // Re-normalize notes after temperature
+        const noteSumAfterTemp = noteProbs.reduce((a, b) => a + b, 0)
+        if (noteSumAfterTemp > 0) {
+          for (let i = 0; i < noteProbs.length; i++) {
+            noteProbs[i] /= noteSumAfterTemp
+          }
+        }
+
+        // Combine: articulation probability vs rest/sustain
+        // Reduce sustain probability to avoid long notes
+        const articSum = restProb + sustainProb * 0.3  // Reduce sustain weight
+        const noteWeight = 1 - Math.min(articSum, 0.4)  // Notes get at least 60%
+
+        // Build final probability vector
+        const combined = new Array(PITCH_RANGE + 2)
+        combined[0] = restProb * 0.5  // Reduce rest probability
+        combined[1] = sustainProb * 0.15  // Significantly reduce sustain
+        for (let i = 0; i < PITCH_RANGE; i++) {
+          combined[i + 2] = noteProbs[i] * noteWeight
+        }
+
+        // Final normalization
+        const sum = combined.reduce((a, b) => a + b, 0)
+        if (sum > 0) {
+          for (let i = 0; i < combined.length; i++) {
+            combined[i] /= sum
+          }
+        }
+
+        // Sample
+        const sampledIndex = this.sample(combined)
+
+        // Decode
+        let decoded
+        if (sampledIndex === 0) {
+          decoded = { type: 'rest', note: null }
+        } else if (sampledIndex === 1) {
+          decoded = { type: 'continue', note: null }
+        } else {
+          const midiNote = LOW_BOUND + (sampledIndex - 2)
+          decoded = { type: 'note', note: midiNote }
+        }
 
         melody.push({
           timestep,
@@ -396,9 +505,10 @@ export class SoloEngine {
           chordRoot
         })
 
-        // Actualizar estado para siguiente paso
+        // Update state
         if (decoded.type === 'note') {
-          prevNote = decoded.note
+          prevNote = relativePosition
+          relativePosition = decoded.note
           isRest = false
           isContinue = false
         } else if (decoded.type === 'rest') {
@@ -408,68 +518,61 @@ export class SoloEngine {
           isContinue = true
         }
 
-        input.dispose()
-        logits.dispose()
         timestep++
       }
     }
 
-    // Limpiar estados finales
-    state1.h.dispose(); state1.c.dispose()
-    state2.h.dispose(); state2.c.dispose()
+    // Cleanup
+    this.disposeState(state0)
+    this.disposeState(state1)
 
-    console.log(`Generated ${melody.length} notes`)
+    console.log(`Generated ${melody.length} notes with PoE`)
     return melody
   }
 
-  /**
-   * Convierte nota MIDI a nombre
-   */
+  sample(probs) {
+    const r = Math.random()
+    let cumulative = 0
+    for (let i = 0; i < probs.length; i++) {
+      cumulative += probs[i]
+      if (r < cumulative) return i
+    }
+    return probs.length - 1
+  }
+
+  disposeState(state) {
+    state.lstm1.h.dispose()
+    state.lstm1.c.dispose()
+    state.lstm2.h.dispose()
+    state.lstm2.c.dispose()
+  }
+
   midiToNoteName(midi) {
     const pitchClass = midi % 12
     const octave = Math.floor(midi / 12) - 1
     return NOTE_NAMES[pitchClass] + octave
   }
 
-  /**
-   * Programa el solo para reproducción sincronizado con el Transport
-   * @param {Array} melody - Array de notas generadas
-   * @param {number} stepsPerBeat - Subdivisión usada
-   */
   scheduleSolo(melody, stepsPerBeat = 2) {
-    if (!this.synth) {
-      this.initSynth()
-    }
-
+    if (!this.synth) this.initSynth()
     this.clearScheduledEvents()
 
-    // Usar notación de Tone.js para sincronizar con Transport
-    // '8n' = corchea, '16n' = semicorchea
     const stepNotation = stepsPerBeat === 2 ? '8n' : '16n'
 
     melody.forEach((note, index) => {
       if (note.type === 'note') {
         const noteName = this.midiToNoteName(note.note)
-
-        // Calcular tiempo en notación de compás: "measure:beat:subdivision"
         const measure = Math.floor(note.timestep / (4 * stepsPerBeat))
         const beatInMeasure = Math.floor((note.timestep % (4 * stepsPerBeat)) / stepsPerBeat)
         const subdivision = note.timestep % stepsPerBeat
-
-        // Formato Tone.js: "bars:quarters:sixteenths"
         const timeStr = `${measure}:${beatInMeasure}:${subdivision * (4 / stepsPerBeat)}`
 
-        // Buscar duración (contar continues siguientes)
         let durationSteps = 1
         for (let j = index + 1; j < melody.length; j++) {
-          if (melody[j].type === 'continue') {
-            durationSteps++
-          } else {
-            break
-          }
+          if (melody[j].type === 'continue') durationSteps++
+          else break
         }
 
-        // Convertir duración a notación
         const durationStr = `${durationSteps}*${stepNotation}`
 
         const eventId = Tone.Transport.schedule((t) => {
@@ -483,41 +586,20 @@ export class SoloEngine {
     return this.scheduledEvents.length
   }
 
-  /**
-   * Limpia eventos programados
-   */
   clearScheduledEvents() {
-    this.scheduledEvents.forEach(id => {
-      Tone.Transport.clear(id)
-    })
+    this.scheduledEvents.forEach(id => Tone.Transport.clear(id))
     this.scheduledEvents = []
   }
 
-  /**
-   * Establece el volumen del solo
-   */
   setVolume(volumeDb) {
-    if (this.synth) {
-      this.synth.volume.value = volumeDb
-    }
+    if (this.synth) this.synth.volume.value = volumeDb
   }
 
-  /**
-   * Limpia recursos
-   */
   dispose() {
     this.clearScheduledEvents()
-
-    if (this.synth) {
-      this.synth.dispose()
-      this.synth = null
-    }
-
-    if (this.lstm1) this.lstm1.dispose()
-    if (this.lstm2) this.lstm2.dispose()
-    if (this.denseW) this.denseW.dispose()
-    if (this.denseB) this.denseB.dispose()
-
+    if (this.synth) { this.synth.dispose(); this.synth = null }
+    if (this.expert0) { this.expert0.dispose(); this.expert0 = null }
+    if (this.expert1) { this.expert1.dispose(); this.expert1 = null }
     this.loaded = false
   }
 }

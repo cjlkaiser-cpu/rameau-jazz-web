@@ -46,23 +46,26 @@
 ### v0.2.5 - AI Solo Generation (Completado)
 **Objetivo**: Generación de solos de jazz con IA
 
-#### LSTM Neural Network
-- [x] **Modelo Clifford Brown** - Port del connectome de Impro-Visor
-  - 2-layer LSTM (300 hidden units)
-  - Entrenado en transcripciones de solos reales
-- [x] **TensorFlow.js** - Inferencia en el navegador
-  - Pesos comprimidos (~2MB gzip)
-  - Generación en tiempo real
+#### Lick-Based Engine (Enfoque final)
+- [x] **3050 licks extraídos** - De Impro-Visor training data
+  - Charlie Parker, Clifford Brown, Coltrane, Miles Davis, etc.
+  - Categorías: ii-V-I (515), blues (123), bebop (2412)
+- [x] **Selección inteligente de licks**
+  - Chord tone matching (bonus si nota inicial es tono de acorde)
+  - Proximity scoring (conexión suave entre licks)
+  - Context detection (ii-V-I, blues, bebop)
+- [x] **Sin dependencia de TensorFlow** - Bundle ligero (~1MB licks.json)
 
 #### Integración
 - [x] **Botón AI Solo** - Genera solo sobre la progresión actual
-- [x] **SoloEngine.js** - Motor de generación integrado
-- [x] **Sintetizador de solo** - MonoSynth tipo trompeta/sax
+- [x] **LickEngine.js** - Motor de generación basado en patrones
+- [x] **Sintetizador de solo** - MonoSynth tipo trompeta jazz
 - [x] **Toggle ON/OFF** - Activar/desactivar solo durante playback
 
-#### Export Impro-Visor
-- [x] **Export .ls** - Leadsheet format compatible
+#### Export
+- [x] **Export .ls** - Leadsheet format compatible con Impro-Visor
 - [x] **Chord chart** - Texto copiable al clipboard
+- [x] **Export iReal Pro** - URL compatible para practicar con backing tracks
 
 ---
 
@@ -239,7 +242,8 @@
 ## Backlog (Sin priorizar)
 
 ### Ideas Futuras
-- [x] **AI Solo Generation** - LSTM para generar solos de jazz (v0.2.5)
+- [x] **AI Solo Generation** - Lick-based engine (v0.2.5)
+- [x] **Export iReal Pro** - Compatible con la app de backing tracks (v0.2.5)
 - [ ] **AI suggestions** - LLM para sugerir próximo acorde
 - [ ] **Style transfer** - "Suena como Bill Evans"
 - [ ] **MIDI input** - Tocar acordes con teclado MIDI
@@ -269,7 +273,9 @@ Prioridades actuales:
 3. ~~Guardar progresiones (v0.2.0)~~ ✅
 4. ~~Export PDF Lead Sheet (v0.2.0)~~ ✅
 5. ~~Presets personalizados (v0.2.0)~~ ✅
-6. Edición manual de acordes (v0.3.0)
+6. ~~AI Solo con licks (v0.2.5)~~ ✅
+7. ~~Export iReal Pro (v0.2.5)~~ ✅
+8. Edición manual de acordes (v0.3.0)
 
 ---
 

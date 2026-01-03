@@ -29,7 +29,7 @@
 <script setup>
 import { ref } from 'vue'
 import { useHarmonyStore } from '../stores/harmony'
-import { getSoloEngine } from '../solo/SoloEngine.js'
+import { getLickEngine } from '../solo/LickEngine.js'
 
 const harmonyStore = useHarmonyStore()
 
@@ -58,10 +58,10 @@ function setVolume(channelId, event) {
   const value = event.target.value / 100
   if (channelId === 'solo') {
     soloVolume.value = value
-    const soloEngine = getSoloEngine()
+    const lickEngine = getLickEngine()
     // Convert 0-1 to dB (-30 to +6)
     const db = value > 0 ? -30 + (value * 36) : -Infinity
-    soloEngine.setVolume(db)
+    lickEngine.setVolume(db)
   } else {
     harmonyStore.setVolume(channelId, value)
   }
@@ -86,8 +86,8 @@ function toggleChannel(channelId) {
       break
     case 'solo':
       soloEnabled.value = !soloEnabled.value
-      const soloEngine = getSoloEngine()
-      soloEngine.setVolume(soloEnabled.value ? 0 : -Infinity)
+      const lickEngine = getLickEngine()
+      lickEngine.setVolume(soloEnabled.value ? 0 : -Infinity)
       break
   }
 }

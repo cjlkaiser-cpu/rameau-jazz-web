@@ -81,6 +81,12 @@
             <span class="option-icon">&#128196;</span>
             Chord Chart (texto)
           </button>
+          <div class="export-divider"></div>
+          <div class="export-section-label">iREAL PRO</div>
+          <button class="export-option" @click="exportIReal">
+            <span class="option-icon">&#127925;</span>
+            Copiar URL iReal Pro
+          </button>
         </div>
       </div>
     </div>
@@ -135,7 +141,9 @@ import {
 } from '../export/AudioExporter.js'
 import { downloadPdf, generatePdfFilename } from '../export/PdfExporter.js'
 import { exportLeadsheet, generateChordChart } from '../export/LeadsheetExporter.js'
-import { getSoloEngine } from '../solo/SoloEngine.js'
+import { copyIRealUrl } from '../utils/iRealExport.js'
+import { getLickEngine } from '../solo/LickEngine.js'
+import { JAZZ_DEGREES } from '../engine/JazzDegrees.js'
 
 const harmonyStore = useHarmonyStore()
 
@@ -233,7 +241,7 @@ function setSwing(event) {
   harmonyStore.setSwingAmount(event.target.value / 100)
 }
 
-// Solo generation
+// Solo generation using LickEngine
 async function generateSolo() {
   if (isGeneratingSolo.value || !hasProgression.value) return
 
@@ -241,26 +249,20 @@ async function generateSolo() {
   soloGenerated.value = false
 
   try {
-    const soloEngine = getSoloEngine()
+    const lickEngine = getLickEngine()
 
-    // Cargar modelo si no está cargado
-    if (!soloEngine.loaded) {
-      await soloEngine.loadModel()
-    }
-
-    // Generar solo (temperatura baja = más conservador)
-    const melody = await soloEngine.generate(
+    // Generar solo basado en licks
+    const melody = await lickEngine.generate(
       harmonyStore.progression,
-      2,  // stepsPerBeat (corcheas)
-      0.5 // temperature (más bajo = menos free jazz)
+      2  // stepsPerBeat (corcheas)
     )
 
     // Programar solo
-    soloEngine.scheduleSolo(melody, 2)
+    lickEngine.scheduleSolo(melody, 2)
 
     soloGenerated.value = true
     soloEnabled.value = true
-    console.log(`Solo generated: ${melody.filter(n => n.type === 'note').length} notes`)
+    console.log(`Lick-based solo generated: ${melody.filter(n => n.type === 'note').length} notes`)
   } catch (err) {
     console.error('Error generating solo:', err)
     alert('Error generating solo: ' + err.message)
@@ -273,16 +275,12 @@ function toggleSolo() {
   if (!soloGenerated.value) return
 
   soloEnabled.value = !soloEnabled.value
-  const soloEngine = getSoloEngine()
+  const lickEngine = getLickEngine()
 
   if (soloEnabled.value) {
-    // Re-schedule solo
-    if (harmonyStore.progression.length > 0) {
-      // El solo ya está programado
-    }
-    soloEngine.setVolume(-6)
+    lickEngine.setVolume(-6)
   } else {
-    soloEngine.setVolume(-Infinity)
+    lickEngine.setVolume(-Infinity)
   }
 }
 
@@ -393,6 +391,33 @@ function exportChordChart() {
     link.click()
     URL.revokeObjectURL(url)
   })
+
+  showExportMenu.value = false
+}
+
+async function exportIReal() {
+  const style = harmonyStore.stylePreset === 'bossaNova' ? 'Bossa Nova' :
+                harmonyStore.stylePreset === 'bebop' ? 'Up Tempo Swing' :
+                harmonyStore.stylePreset === 'ballad' ? 'Ballad' :
+                harmonyStore.stylePreset === 'modal' ? 'Medium Swing' : 'Medium Swing'
+
+  const result = await copyIRealUrl(
+    harmonyStore.progression,
+    JAZZ_DEGREES,
+    {
+      title: `RameauJazz ${harmonyStore.key}`,
+      composer: 'Generated',
+      style,
+      key: harmonyStore.key
+    }
+  )
+
+  if (result.success) {
+    alert('URL iReal Pro copiada al clipboard.\n\nPégala en Safari/Chrome para abrir en iReal Pro.')
+  } else {
+    // Fallback: show URL in prompt
+    prompt('URL iReal Pro (copia manualmente):', result.url)
+  }
 
   showExportMenu.value = false
 }
