@@ -2,41 +2,99 @@
   <div class="panel song-form-panel">
     <div class="panel-header">Estructura</div>
 
-    <!-- Form selector -->
-    <div class="control-row">
-      <label>Forma</label>
-      <select v-model="selectedForm" class="form-control form-select">
-        <option v-for="template in templates" :key="template.id" :value="template.id">
-          {{ template.name }}
-        </option>
-      </select>
-    </div>
-
-    <!-- Visual preview -->
-    <div class="form-preview">
-      <span
-        v-for="(section, idx) in currentSections"
-        :key="idx"
-        class="section-badge"
-        :class="`section-${section.toLowerCase()}`"
+    <!-- Mode toggle -->
+    <div class="mode-toggle">
+      <button
+        class="mode-btn"
+        :class="{ active: mode === 'generate' }"
+        @click="mode = 'generate'"
       >
-        {{ section }}
-      </span>
-      <span class="total-bars">{{ currentTemplate?.totalBars }} bars</span>
+        Generar
+      </button>
+      <button
+        class="mode-btn"
+        :class="{ active: mode === 'standard' }"
+        @click="mode = 'standard'"
+      >
+        Standards
+      </button>
     </div>
 
-    <!-- Generate button -->
-    <button class="generate-song-btn" @click="generateSong">
-      Generar Cancion
-    </button>
+    <!-- Generate mode -->
+    <template v-if="mode === 'generate'">
+      <!-- Form selector -->
+      <div class="control-row">
+        <label>Forma</label>
+        <select v-model="selectedForm" class="form-control form-select">
+          <option v-for="template in templates" :key="template.id" :value="template.id">
+            {{ template.name }}
+          </option>
+        </select>
+      </div>
+
+      <!-- Visual preview -->
+      <div class="form-preview">
+        <span
+          v-for="(section, idx) in currentSections"
+          :key="idx"
+          class="section-badge"
+          :class="`section-${section.toLowerCase()}`"
+        >
+          {{ section }}
+        </span>
+        <span class="total-bars">{{ currentTemplate?.totalBars }} bars</span>
+      </div>
+
+      <!-- Generate button -->
+      <button class="generate-song-btn" @click="generateSong">
+        Generar Cancion
+      </button>
+    </template>
+
+    <!-- Standards mode -->
+    <template v-else>
+      <div class="selected-standard" v-if="selectedStandard">
+        <div class="standard-name">{{ selectedStandard.title }}</div>
+        <div class="standard-info">
+          {{ selectedStandard.composer }} · {{ selectedStandard.chords.length }} bars · {{ selectedStandard.key }}
+        </div>
+      </div>
+
+      <button class="browse-btn" @click="showLibrary = true">
+        Buscar en 2614 Standards
+      </button>
+
+      <button
+        class="generate-song-btn"
+        @click="loadStandard"
+        :disabled="!selectedStandard"
+      >
+        Cargar Standard
+      </button>
+    </template>
+
+    <!-- Standards Library Modal -->
+    <StandardsLibrary
+      :isOpen="showLibrary"
+      @close="showLibrary = false"
+      @select="onSelectStandard"
+    />
   </div>
 </template>
 
 <script setup>
 import { ref, computed } from 'vue'
 import { useHarmonyStore } from '../stores/harmony'
+import StandardsLibrary from './StandardsLibrary.vue'
 
 const harmonyStore = useHarmonyStore()
+
+// Mode: 'generate' or 'standard'
+const mode = ref('generate')
+
+// Standards mode state
+const showLibrary = ref(false)
+const selectedStandard = ref(null)
 
 // Get templates from store
 const templates = computed(() => {
@@ -68,6 +126,29 @@ const currentSections = computed(() => {
 function generateSong() {
   harmonyStore.generateSongForm(selectedForm.value)
 }
+
+// Standard selection
+function onSelectStandard(standard) {
+  selectedStandard.value = standard
+}
+
+// Load selected standard into progression
+function loadStandard() {
+  if (!selectedStandard.value) return
+
+  const standard = selectedStandard.value
+
+  // Convert chord symbols to our progression format
+  const progression = standard.chords.map((chord, idx) => ({
+    degree: chord,
+    key: standard.key,
+    tension: 0.5, // Default tension
+    section: idx === 0 ? 'A' : null // Mark first chord
+  }))
+
+  // Load into store
+  harmonyStore.loadProgression(progression)
+}
 </script>
 
 <style scoped>
@@ -83,6 +164,37 @@ function generateSong() {
   color: var(--text-secondary);
   text-transform: uppercase;
   letter-spacing: 0.5px;
+}
+
+/* Mode toggle */
+.mode-toggle {
+  display: flex;
+  gap: 4px;
+  background: var(--bg-tertiary);
+  padding: 3px;
+  border-radius: var(--radius-md);
+}
+
+.mode-btn {
+  flex: 1;
+  padding: 6px 12px;
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.mode-btn:hover {
+  color: var(--text-primary);
+}
+
+.mode-btn.active {
+  background: var(--accent-blue);
+  color: white;
 }
 
 .control-row {
@@ -183,5 +295,50 @@ function generateSong() {
 
 .generate-song-btn:active {
   transform: translateY(0);
+}
+
+.generate-song-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
+/* Standards mode */
+.selected-standard {
+  padding: 10px 12px;
+  background: var(--bg-tertiary);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border-color);
+}
+
+.standard-name {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 4px;
+}
+
+.standard-info {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.browse-btn {
+  width: 100%;
+  padding: 10px 16px;
+  background: var(--bg-tertiary);
+  border: 1px dashed var(--border-color);
+  border-radius: var(--radius-md);
+  color: var(--text-secondary);
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+
+.browse-btn:hover {
+  border-color: var(--accent-blue);
+  color: var(--accent-blue);
+  background: rgba(88, 166, 255, 0.1);
 }
 </style>

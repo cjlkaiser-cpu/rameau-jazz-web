@@ -188,6 +188,25 @@ export const useHarmonyStore = defineStore('harmony', () => {
     return result
   }
 
+  function loadProgression(newProgression) {
+    progression.value = newProgression
+
+    // Actualizar estado
+    if (newProgression.length > 0) {
+      const first = newProgression[0]
+      currentChord.value = first.degree
+      tension.value = first.tension ?? 0.5
+      currentMeasure.value = 0
+      currentBeat.value = 0
+    }
+
+    // Cargar en audio engine
+    const audioEngine = getAudioEngine()
+    audioEngine.loadProgression(newProgression)
+
+    return newProgression
+  }
+
   async function play() {
     // Inicializar audio si es necesario
     if (!audioInitialized.value) {
@@ -555,6 +574,7 @@ export const useHarmonyStore = defineStore('harmony', () => {
     // Song Forms (v0.3.5)
     songForm,
     generateSongForm,
+    loadProgression,
     FORM_TEMPLATES
   }
 })
