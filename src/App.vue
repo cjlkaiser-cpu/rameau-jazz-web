@@ -122,10 +122,10 @@ const minHeight = 100
 const maxHeight = 400
 
 // Footer resize
-const footerHeight = ref(60)
+const footerHeight = ref(80)
 const isFooterResizing = ref(false)
 const minFooterHeight = 50
-const maxFooterHeight = 200
+const maxFooterHeight = 400
 
 function startResize(e) {
   isResizing.value = true
