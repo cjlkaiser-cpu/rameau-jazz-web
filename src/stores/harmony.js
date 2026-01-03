@@ -1,11 +1,13 @@
 import { defineStore } from 'pinia'
 import { ref, computed, watch } from 'vue'
 import { MarkovEngine } from '../engine/MarkovEngine.js'
+import { SongFormEngine, FORM_TEMPLATES } from '../engine/SongFormEngine.js'
 import { JAZZ_DEGREES } from '../engine/JazzDegrees.js'
 import { getAudioEngine } from '../audio/AudioEngine.js'
 
 // Instancia del motor
 const engine = new MarkovEngine()
+const songFormEngine = new SongFormEngine()
 
 export const useHarmonyStore = defineStore('harmony', () => {
   // === TONALIDAD ===
@@ -14,6 +16,9 @@ export const useHarmonyStore = defineStore('harmony', () => {
 
   // === CLIPBOARD (v0.3.0) ===
   const clipboard = ref([]) // Array of {degree, key, tension}
+
+  // === SONG FORM (v0.3.5) ===
+  const songForm = ref('AABA') // Current form template
 
   // === MOTOR ===
   const currentChord = ref('Imaj7')
@@ -142,6 +147,29 @@ export const useHarmonyStore = defineStore('harmony', () => {
   function generateProgression(numChords = 8) {
     syncEngineConfig()
     const result = engine.generateProgression(numChords, key.value)
+    progression.value = result
+
+    // Actualizar estado
+    if (result.length > 0) {
+      const first = result[0]
+      currentChord.value = first.degree
+      tension.value = first.tension
+      currentMeasure.value = 0
+      currentBeat.value = 0
+    }
+
+    // Cargar en audio engine
+    const audioEngine = getAudioEngine()
+    audioEngine.loadProgression(result)
+
+    return result
+  }
+
+  function generateSongForm(formType = null) {
+    const form = formType || songForm.value
+    songForm.value = form
+
+    const result = songFormEngine.generate(form, key.value)
     progression.value = result
 
     // Actualizar estado
@@ -522,6 +550,11 @@ export const useHarmonyStore = defineStore('harmony', () => {
     clipboard,
     copyChords,
     pasteChords,
-    hasClipboard
+    hasClipboard,
+
+    // Song Forms (v0.3.5)
+    songForm,
+    generateSongForm,
+    FORM_TEMPLATES
   }
 })

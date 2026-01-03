@@ -78,6 +78,27 @@
 - [x] **Insertar/eliminar acordes** - En cualquier posición
 - [x] **Copiar/pegar secciones** - Clipboard de acordes (Ctrl+C/V, Shift+Click)
 
+---
+
+### v0.3.5 - Song Forms (Completado)
+**Objetivo**: Generar canciones completas con estructuras típicas
+
+#### Templates de Forma
+- [x] **AABA (32 bars)** - Rhythm Changes, standards
+- [x] **Blues 12** - 12-bar blues
+- [x] **ABAC / ABAB (32 bars)** - Variantes comunes
+
+#### Generación Inteligente
+- [x] **Secciones contrastantes** - A estable, B con más tensión
+- [x] **Turnarounds automáticos** - V7→I al final de cada sección
+- [x] **Marcadores visuales** - [A] [B] [C] en ProgressionDisplay
+- [x] **Click en marcador** - Selecciona toda la sección
+
+---
+
+### v0.4.0 - Constraints & Analysis (En progreso)
+**Objetivo**: Mayor control sobre las restricciones
+
 #### Constraints
 - [ ] **Forzar cadencias** - V-I al final, ii-V-I, etc.
 - [ ] **Bloquear acordes** - Mantener acordes específicos fijos

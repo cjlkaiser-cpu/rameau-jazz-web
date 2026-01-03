@@ -33,6 +33,17 @@
           +
         </button>
 
+        <!-- Section marker (v0.3.5) -->
+        <span
+          v-if="chord.section"
+          class="section-marker"
+          :class="`section-marker-${chord.section.toLowerCase()}`"
+          @click.stop="selectSection(chord.section)"
+          :title="`Seccion ${chord.section} - Click para seleccionar`"
+        >
+          {{ chord.section }}
+        </span>
+
         <!-- Chord badge (clickable, draggable) -->
         <span
           class="chord-item"
@@ -182,6 +193,34 @@ function onChordClick(index, event) {
 function clearSelection() {
   selectedIndices.clear()
   lastSelectedIndex.value = null
+}
+
+// Select all chords in a section
+function selectSection(sectionLabel) {
+  clearSelection()
+
+  // Find all indices that belong to this section
+  let inSection = false
+  for (let i = 0; i < progression.value.length; i++) {
+    const chord = progression.value[i]
+
+    // Start of target section
+    if (chord.section === sectionLabel) {
+      inSection = true
+    }
+    // Start of different section
+    else if (chord.section && chord.section !== sectionLabel) {
+      inSection = false
+    }
+
+    if (inSection) {
+      selectedIndices.add(i)
+    }
+  }
+
+  if (selectedIndices.size > 0) {
+    lastSelectedIndex.value = Math.max(...selectedIndices)
+  }
 }
 
 function copySelection() {
@@ -604,5 +643,43 @@ function onDrop(index) {
 .chord-item.selected .chord-badge {
   outline: 2px solid var(--accent-blue);
   outline-offset: 2px;
+}
+
+/* Section markers (v0.3.5) */
+.section-marker {
+  position: absolute;
+  top: -16px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 9px;
+  font-weight: 700;
+  font-family: 'SF Mono', Monaco, monospace;
+  cursor: pointer;
+  transition: all 0.15s;
+  z-index: 5;
+}
+
+.section-marker:hover {
+  transform: translateX(-50%) scale(1.1);
+}
+
+.section-marker-a {
+  background: rgba(63, 185, 80, 0.3);
+  color: var(--accent-green);
+  border: 1px solid rgba(63, 185, 80, 0.5);
+}
+
+.section-marker-b {
+  background: rgba(210, 153, 34, 0.3);
+  color: var(--accent-yellow);
+  border: 1px solid rgba(210, 153, 34, 0.5);
+}
+
+.section-marker-c {
+  background: rgba(163, 113, 247, 0.3);
+  color: var(--accent-purple);
+  border: 1px solid rgba(163, 113, 247, 0.5);
 }
 </style>
