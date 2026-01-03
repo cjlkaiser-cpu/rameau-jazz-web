@@ -333,6 +333,93 @@ export const useHarmonyStore = defineStore('harmony', () => {
     }
   }
 
+  // === CHORD EDITING (v0.3.0) ===
+
+  /**
+   * Helper to reload progression in audio engine
+   */
+  function reloadAudioProgression() {
+    if (audioInitialized.value) {
+      const audioEngine = getAudioEngine()
+      audioEngine.loadProgression(progression.value)
+    }
+  }
+
+  /**
+   * Update a chord at a specific index
+   * @param {number} index - Position in progression
+   * @param {object} updates - {degree?, key?, tension?}
+   */
+  function updateChordAt(index, updates) {
+    if (index < 0 || index >= progression.value.length) return
+
+    const chord = progression.value[index]
+    const newDegree = updates.degree || chord.degree
+    const degreeInfo = JAZZ_DEGREES[newDegree]
+
+    progression.value[index] = {
+      ...chord,
+      ...updates,
+      // Recalculate tension from JAZZ_DEGREES if degree changed
+      tension: updates.degree
+        ? (degreeInfo?.tension ?? chord.tension)
+        : (updates.tension ?? chord.tension)
+    }
+
+    reloadAudioProgression()
+  }
+
+  /**
+   * Insert a chord at a specific index
+   * @param {number} index - Position to insert at
+   * @param {object} chord - {degree, key?, tension?}
+   */
+  function insertChordAt(index, chord) {
+    const degreeInfo = JAZZ_DEGREES[chord.degree]
+    const newChord = {
+      degree: chord.degree,
+      key: chord.key ?? key.value,
+      tension: chord.tension ?? (degreeInfo?.tension ?? 0)
+    }
+
+    progression.value.splice(index, 0, newChord)
+    reloadAudioProgression()
+  }
+
+  /**
+   * Remove chord at index
+   * @param {number} index - Position to remove
+   */
+  function removeChordAt(index) {
+    if (progression.value.length <= 1) return // Keep at least one chord
+    if (index < 0 || index >= progression.value.length) return
+
+    progression.value.splice(index, 1)
+
+    // Adjust currentMeasure if needed
+    if (currentMeasure.value >= progression.value.length) {
+      currentMeasure.value = progression.value.length - 1
+    }
+
+    reloadAudioProgression()
+  }
+
+  /**
+   * Move chord from one position to another
+   * @param {number} fromIndex - Source position
+   * @param {number} toIndex - Destination position
+   */
+  function moveChord(fromIndex, toIndex) {
+    if (fromIndex === toIndex) return
+    if (fromIndex < 0 || fromIndex >= progression.value.length) return
+    if (toIndex < 0 || toIndex >= progression.value.length) return
+
+    const [chord] = progression.value.splice(fromIndex, 1)
+    progression.value.splice(toIndex, 0, chord)
+
+    reloadAudioProgression()
+  }
+
   return {
     // State
     key,
@@ -386,6 +473,12 @@ export const useHarmonyStore = defineStore('harmony', () => {
     setDrumsEnabled,
     modulate,
     previewChord,
-    getCurrentChordInfo
+    getCurrentChordInfo,
+
+    // Chord editing (v0.3.0)
+    updateChordAt,
+    insertChordAt,
+    removeChordAt,
+    moveChord
   }
 })

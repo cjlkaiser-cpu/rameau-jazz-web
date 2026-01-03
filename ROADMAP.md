@@ -69,13 +69,13 @@
 
 ---
 
-### v0.3.0 - Interactividad Avanzada
+### v0.3.0 - Interactividad Avanzada (Completado)
 **Objetivo**: Mayor control sobre la generación
 
 #### Edición Manual
-- [ ] **Drag & drop acordes** - Reordenar progresión
-- [ ] **Click para cambiar acorde** - Selector contextual
-- [ ] **Insertar/eliminar acordes** - En cualquier posición
+- [x] **Drag & drop acordes** - Reordenar progresión
+- [x] **Click para cambiar acorde** - Selector contextual (ChordPicker dropdown)
+- [x] **Insertar/eliminar acordes** - En cualquier posición
 - [ ] **Copiar/pegar secciones** - Clipboard de acordes
 
 #### Constraints
@@ -275,7 +275,8 @@ Prioridades actuales:
 5. ~~Presets personalizados (v0.2.0)~~ ✅
 6. ~~AI Solo con licks (v0.2.5)~~ ✅
 7. ~~Export iReal Pro (v0.2.5)~~ ✅
-8. Edición manual de acordes (v0.3.0)
+8. ~~Edición manual de acordes (v0.3.0)~~ ✅
+9. Constraints (v0.3.0) - Forzar cadencias, bloquear acordes
 
 ---
 
