@@ -66,13 +66,29 @@ const SECTION_CONFIG = {
 }
 
 /**
- * Common turnaround patterns for jazz
+ * Turnaround patterns - some resolve, some suspend
  */
 const TURNAROUNDS = {
-  basic: ['V7', 'Imaj7'],           // V-I
-  extended: ['IIm7', 'V7', 'Imaj7'], // ii-V-I
-  tritone: ['bII7', 'Imaj7'],       // Tritone sub
-  full: ['IIIm7', 'VI7', 'IIm7', 'V7'] // iii-VI-ii-V
+  // Resolving (for final section)
+  resolve: ['V7', 'Imaj7'],           // V-I
+  resolveExtended: ['IIm7', 'V7', 'Imaj7'], // ii-V-I
+
+  // Suspending (for middle sections - no resolution)
+  suspend: ['IIm7', 'V7'],            // ii-V (leaves tension)
+  suspendLong: ['IIIm7', 'VI7', 'IIm7', 'V7'], // iii-VI-ii-V
+
+  // Colorful alternatives
+  backdoor: ['IVm7', 'bVII7'],        // Minor iv - bVII
+  tritone: ['IIm7', 'bII7'],          // ii - tritone sub
+}
+
+/**
+ * Starting chords for contrast
+ */
+const SECTION_STARTS = {
+  'A': ['Imaj7'],                     // A always starts on tonic
+  'B': ['IVmaj7', 'IIm7', 'VIm7', 'bVIImaj7'], // B has contrast options
+  'C': ['IIm7', 'IVmaj7', 'bVImaj7'], // C also contrasts
 }
 
 export class SongFormEngine {
@@ -94,27 +110,66 @@ export class SongFormEngine {
 
     const generatedSections = {}
     const progression = []
+    const totalSections = template.sections.length
 
-    for (const sectionLabel of template.sections) {
+    template.sections.forEach((sectionLabel, sectionIndex) => {
+      const isLastSection = sectionIndex === totalSections - 1
+      const isFirstOccurrence = !generatedSections[sectionLabel]
+
       // Generate section only once, then reuse (e.g., A in AABA)
-      if (!generatedSections[sectionLabel]) {
+      if (isFirstOccurrence) {
+        // Determine if this section type ever appears as last
+        const appearsAsLast = template.sections.lastIndexOf(sectionLabel) === totalSections - 1
+
         generatedSections[sectionLabel] = this.generateSection(
           sectionLabel,
           template.barsPerSection,
-          key
+          key,
+          appearsAsLast // Only resolve if this section appears at the end
         )
       }
 
       // Clone section and add markers
-      const sectionChords = generatedSections[sectionLabel].map((chord, idx) => ({
+      let sectionChords = generatedSections[sectionLabel].map((chord, idx) => ({
         ...chord,
         section: idx === 0 ? sectionLabel : null // Mark first chord of section
       }))
 
+      // If this is the last section but not the "resolving" version, fix the ending
+      if (isLastSection && !generatedSections[sectionLabel]._resolves) {
+        sectionChords = this.ensureResolution(sectionChords, key)
+      }
+
       progression.push(...sectionChords)
-    }
+    })
 
     return progression
+  }
+
+  /**
+   * Ensure a section ends with proper resolution
+   */
+  ensureResolution(chords, key) {
+    if (chords.length < 2) return chords
+
+    const result = [...chords]
+    const lastIdx = result.length - 1
+
+    // Replace last two chords with V7 → Imaj7
+    result[lastIdx - 1] = {
+      ...result[lastIdx - 1],
+      degree: 'V7',
+      key: key,
+      tension: JAZZ_DEGREES['V7']?.tension || 0.8
+    }
+    result[lastIdx] = {
+      ...result[lastIdx],
+      degree: 'Imaj7',
+      key: key,
+      tension: JAZZ_DEGREES['Imaj7']?.tension || 0
+    }
+
+    return result
   }
 
   /**
@@ -122,9 +177,10 @@ export class SongFormEngine {
    * @param {string} sectionLabel - A, B, or C
    * @param {number} numBars - Number of bars
    * @param {string} key - Musical key
+   * @param {boolean} shouldResolve - Whether to end with resolution (only for final section)
    * @returns {Array} Section chords
    */
-  generateSection(sectionLabel, numBars, key) {
+  generateSection(sectionLabel, numBars, key, shouldResolve = false) {
     const config = SECTION_CONFIG[sectionLabel] || SECTION_CONFIG['A']
 
     // Configure engine for this section's character
@@ -133,38 +189,87 @@ export class SongFormEngine {
       modulationEnabled: true,
       modulationProbability: config.modulationProbability,
       modulationLevel: config.modulationLevel,
-      returnToTonic: true,
-      forceCadence: true
+      returnToTonic: false,  // We handle endings ourselves
+      forceCadence: false    // We handle cadences ourselves
     })
 
     // Generate base progression
     const section = this.engine.generateProgression(numBars, key)
 
-    // Add turnaround at end of section
-    this.addTurnaround(section, key)
+    // Set starting chord based on section type
+    this.setStartingChord(section, sectionLabel, key)
+
+    // Add appropriate ending
+    if (shouldResolve) {
+      this.addResolvingTurnaround(section, key)
+      section._resolves = true
+    } else {
+      this.addSuspendingTurnaround(section, key)
+    }
 
     return section
   }
 
   /**
-   * Add a turnaround at the end of a section
-   * @param {Array} section - Section chords (modified in place)
-   * @param {string} key - Musical key
+   * Set the starting chord for contrast
    */
-  addTurnaround(section, key) {
+  setStartingChord(section, sectionLabel, key) {
+    if (section.length === 0) return
+
+    const startOptions = SECTION_STARTS[sectionLabel] || SECTION_STARTS['A']
+    const startDegree = startOptions[Math.floor(Math.random() * startOptions.length)]
+
+    section[0] = {
+      degree: startDegree,
+      key: key,
+      tension: JAZZ_DEGREES[startDegree]?.tension || 0
+    }
+  }
+
+  /**
+   * Add a suspending turnaround (ii-V, no resolution)
+   */
+  addSuspendingTurnaround(section, key) {
     if (section.length < 2) return
 
-    // Use basic V-I turnaround for last 2 bars
     const lastIdx = section.length - 1
 
-    // Penultimate: V7
+    // Choose turnaround type randomly
+    const turnaroundTypes = ['suspend', 'backdoor', 'tritone']
+    const turnaroundType = turnaroundTypes[Math.floor(Math.random() * turnaroundTypes.length)]
+    const turnaround = TURNAROUNDS[turnaroundType]
+
+    // Apply last 2 chords of turnaround
+    const t1 = turnaround[0]
+    const t2 = turnaround[1]
+
+    section[lastIdx - 1] = {
+      degree: t1,
+      key: key,
+      tension: JAZZ_DEGREES[t1]?.tension || 0.5
+    }
+
+    section[lastIdx] = {
+      degree: t2,
+      key: key,
+      tension: JAZZ_DEGREES[t2]?.tension || 0.8
+    }
+  }
+
+  /**
+   * Add a resolving turnaround (V-I)
+   */
+  addResolvingTurnaround(section, key) {
+    if (section.length < 2) return
+
+    const lastIdx = section.length - 1
+
     section[lastIdx - 1] = {
       degree: 'V7',
       key: key,
       tension: JAZZ_DEGREES['V7']?.tension || 0.8
     }
 
-    // Last: Imaj7
     section[lastIdx] = {
       degree: 'Imaj7',
       key: key,
