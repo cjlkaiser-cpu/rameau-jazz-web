@@ -1,12 +1,10 @@
 /**
  * MidiExporter.js - Export progressions to Standard MIDI File
  *
- * Generates multi-track MIDI:
- * - Track 1: Piano chords (voicings)
- * - Track 2: Walking bass
- * - Track 3: Drums (optional)
- *
- * Uses midi-writer-js library
+ * Generates professional multi-track MIDI:
+ * - Track 1: Piano (chords)
+ * - Track 2: Electric Bass (walking bass) - separate channel
+ * - Track 3: Drums (jazz swing pattern)
  */
 
 import MidiWriter from 'midi-writer-js'
@@ -23,16 +21,12 @@ const KEY_PITCHES = {
 }
 
 /**
- * GM Drum map
+ * GM Drum notes (channel 10)
  */
-const DRUM_MAP = {
+const DRUM = {
   kick: 36,
-  snare: 38,
-  rimshot: 37,
-  hihatClosed: 42,
-  hihatOpen: 46,
-  ride: 51,
-  crash: 49
+  hihatPedal: 44,
+  rideCymbal: 51
 }
 
 /**
@@ -52,7 +46,7 @@ function generateBassLine(currentChord, nextChord, key) {
   const chordKey = currentChord.key || key
   const nextChordKey = nextChord?.key || key
 
-  const rootPitch = getRootPitch(currentChord.degree, chordKey, 36) // C2
+  const rootPitch = getRootPitch(currentChord.degree, chordKey, 36) // E1-G3 range
   const nextRootPitch = nextChord
     ? getRootPitch(nextChord.degree, nextChordKey, 36)
     : rootPitch
@@ -60,31 +54,18 @@ function generateBassLine(currentChord, nextChord, key) {
   const chordType = JAZZ_DEGREES[currentChord.degree]?.type || 'maj7'
   const intervals = CHORD_TYPES[chordType]?.intervals || [0, 4, 7]
 
+  const third = intervals.find(i => i === 3 || i === 4) || 4
+  const fifth = intervals.find(i => i === 6 || i === 7 || i === 8) || 7
+
   // Beat 1: Root
   const beat1 = rootPitch
 
   // Beat 2: Passing tone
   const rand2 = Math.random()
-  let beat2
-  if (rand2 < 0.4) {
-    beat2 = rootPitch + 2
-  } else if (rand2 < 0.7) {
-    const third = intervals.find(i => i === 3 || i === 4) || 4
-    beat2 = rootPitch + third
-  } else {
-    beat2 = rootPitch + 1
-  }
+  const beat2 = rand2 < 0.5 ? rootPitch + 2 : rootPitch + third
 
-  // Beat 3: Target (5th or 3rd)
-  const rand3 = Math.random()
-  let beat3
-  if (rand3 < 0.5) {
-    const fifth = intervals.find(i => i === 6 || i === 7 || i === 8) || 7
-    beat3 = rootPitch + fifth
-  } else {
-    const third = intervals.find(i => i === 3 || i === 4) || 4
-    beat3 = rootPitch + third
-  }
+  // Beat 3: Chord tone (5th or 3rd)
+  const beat3 = Math.random() < 0.6 ? rootPitch + fifth : rootPitch + third
 
   // Beat 4: Chromatic approach
   const beat4 = nextRootPitch + (Math.random() < 0.5 ? 1 : -1)
@@ -111,62 +92,72 @@ export function exportToMidi({
   const tracks = []
 
   // ============================================
-  // Track 1: Piano (chords)
+  // Track 1: Piano (channel 1)
+  // Only mid-high register (C4-C6) to not overlap with bass
   // ============================================
   const pianoTrack = new MidiWriter.Track()
   pianoTrack.addTrackName('Piano')
   pianoTrack.setTempo(tempo)
   pianoTrack.setTimeSignature(4, 4)
-  pianoTrack.addEvent(new MidiWriter.ProgramChangeEvent({ instrument: 1 }))
+  pianoTrack.addEvent(new MidiWriter.ProgramChangeEvent({ instrument: 1, channel: 1 }))
 
   progression.forEach((chord) => {
     const degreeInfo = JAZZ_DEGREES[chord.degree]
     if (!degreeInfo) {
-      // Add rest for invalid chord
       pianoTrack.addEvent(new MidiWriter.NoteEvent({
-        pitch: ['C4'],
+        pitch: [60],
         duration: '1',
-        velocity: 0
+        velocity: 0,
+        channel: 1
       }))
       return
     }
 
     const chordKey = chord.key || key
-    const rootPitch = getRootPitch(chord.degree, chordKey, 60)
-    const chordType = degreeInfo.type
+    const rootPitch = getRootPitch(chord.degree, chordKey, 60) // C4 base
+    const voicing = getVoicing(rootPitch, degreeInfo.type, voicingStyle)
 
-    // Get voicing
-    const voicing = getVoicing(rootPitch, chordType, voicingStyle)
+    // Combine hands but keep only notes above bass range (>= C3 = 48)
+    // Move low notes up an octave to avoid overlap with bass
     const allNotes = [...voicing.left, ...voicing.right]
+      .map(note => note < 48 ? note + 12 : note) // Move notes below C3 up an octave
+      .filter((note, index, arr) => arr.indexOf(note) === index) // Remove duplicates
 
-    // Add chord - whole note duration for full measure
     pianoTrack.addEvent(new MidiWriter.NoteEvent({
       pitch: allNotes,
       duration: '1',
-      velocity: 80
+      velocity: 75,
+      channel: 1
     }))
   })
 
   tracks.push(pianoTrack)
 
   // ============================================
-  // Track 2: Walking Bass
+  // Track 2: Acoustic Bass (channel 2)
+  // GM 33 = Acoustic Bass, range E1-G3 (MIDI 28-55)
   // ============================================
   if (includeBass) {
     const bassTrack = new MidiWriter.Track()
-    bassTrack.addTrackName('Bass')
-    bassTrack.addEvent(new MidiWriter.ProgramChangeEvent({ instrument: 33 }))
+    bassTrack.addTrackName('Acoustic Bass')
+    // GM instrument 33 = Acoustic Bass (more distinctive sound)
+    bassTrack.addEvent(new MidiWriter.ProgramChangeEvent({ instrument: 33, channel: 2 }))
 
     progression.forEach((chord, measureIndex) => {
       const nextChord = progression[(measureIndex + 1) % progression.length]
       const bassLine = generateBassLine(chord, nextChord, key)
 
-      // Add each beat as quarter note
       bassLine.forEach((pitch, beatIndex) => {
+        // Ensure bass is in proper low range (E1-E3)
+        let bassPitch = pitch
+        while (bassPitch > 52) bassPitch -= 12 // Keep below E3
+        while (bassPitch < 28) bassPitch += 12 // Keep above E1
+
         bassTrack.addEvent(new MidiWriter.NoteEvent({
-          pitch: [pitch],
+          pitch: [bassPitch],
           duration: '4',
-          velocity: beatIndex === 0 ? 100 : 80
+          velocity: beatIndex === 0 ? 100 : 85,
+          channel: 2
         }))
       })
     })
@@ -175,52 +166,56 @@ export function exportToMidi({
   }
 
   // ============================================
-  // Track 3: Drums (Channel 10)
+  // Track 3: Drums (channel 10)
+  // Jazz swing pattern with triplets using startTick
+  // 128 ticks per quarter note
+  // Swing = play on beat and on last third (tick 85 of each beat)
   // ============================================
   if (includeDrums) {
     const drumTrack = new MidiWriter.Track()
     drumTrack.addTrackName('Drums')
 
-    progression.forEach(() => {
-      // Beat 1: Kick + Ride
-      drumTrack.addEvent(new MidiWriter.NoteEvent({
-        pitch: [DRUM_MAP.kick, DRUM_MAP.ride],
-        duration: '4',
-        velocity: 90,
-        channel: 10
-      }))
+    const TICKS_PER_BEAT = 128
+    const TICKS_PER_MEASURE = TICKS_PER_BEAT * 4
+    const TRIPLET_OFFSET = Math.round(TICKS_PER_BEAT * 2 / 3) // 85 ticks
 
-      // Beat 2: Hi-hat + Ride
-      drumTrack.addEvent(new MidiWriter.NoteEvent({
-        pitch: [DRUM_MAP.hihatClosed, DRUM_MAP.ride],
-        duration: '4',
-        velocity: 70,
-        channel: 10
-      }))
+    progression.forEach((_, measureIndex) => {
+      const measureStart = measureIndex * TICKS_PER_MEASURE
 
-      // Beat 3: Ride
-      drumTrack.addEvent(new MidiWriter.NoteEvent({
-        pitch: [DRUM_MAP.ride],
-        duration: '4',
-        velocity: 80,
-        channel: 10
-      }))
+      // Jazz swing pattern: ride on each beat + triplet skip beat
+      // Hi-hat pedal on 2 and 4
+      for (let beat = 0; beat < 4; beat++) {
+        const beatTick = measureStart + (beat * TICKS_PER_BEAT)
+        const isBackbeat = (beat === 1 || beat === 3) // 2 and 4
 
-      // Beat 4: Hi-hat + Ride
-      drumTrack.addEvent(new MidiWriter.NoteEvent({
-        pitch: [DRUM_MAP.hihatClosed, DRUM_MAP.ride],
-        duration: '4',
-        velocity: 70,
-        channel: 10
-      }))
+        // Main beat - Ride (+ hihat on 2 and 4)
+        const mainPitches = isBackbeat
+          ? [DRUM.rideCymbal, DRUM.hihatPedal]
+          : [DRUM.rideCymbal]
+
+        drumTrack.addEvent(new MidiWriter.NoteEvent({
+          pitch: mainPitches,
+          duration: 'T32',
+          velocity: beat === 0 ? 95 : (beat === 2 ? 85 : 75),
+          channel: 10,
+          startTick: beatTick
+        }))
+
+        // Triplet skip beat - Ride only (softer)
+        drumTrack.addEvent(new MidiWriter.NoteEvent({
+          pitch: [DRUM.rideCymbal],
+          duration: 'T32',
+          velocity: 55,
+          channel: 10,
+          startTick: beatTick + TRIPLET_OFFSET
+        }))
+      }
     })
 
     tracks.push(drumTrack)
   }
 
-  // ============================================
   // Generate MIDI file
-  // ============================================
   const write = new MidiWriter.Writer(tracks)
   const midiData = write.buildFile()
 
